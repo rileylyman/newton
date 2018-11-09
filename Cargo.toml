@@ -1,0 +1,7 @@
+[package]
+name = "newton"
+version = "0.1.0"
+authors = ["rileylyman <rileylyman@berkeley.edu>"]
+
+[dependencies]
+rust-crypto = "0.2.36"
