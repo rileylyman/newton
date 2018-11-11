@@ -16,8 +16,21 @@ fn merkle1() {
         String::from("john john")
     );
     let mrkl_tree = merkle::MerkleTree::construct(&mut names);
+    
+    println!("{}", mrkl_tree);
+
     match mrkl_tree.validate() {
-        merkle::MrklVR::Valid =>assert!(true),
-        _ => assert!(false)
+        merkle::MrklVR::Valid => {
+            println!("Valid");
+            assert!(true);
+        }
+        merkle::MrklVR::InvalidHash => {
+            println!("Invalid Hash");
+            assert!(false);
+        }
+        _ => {
+            println!("Invalid Tree");
+            assert!(false);
+        }
     }
 }
