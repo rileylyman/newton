@@ -6,7 +6,7 @@
  * an error result if the passed vector has fewer than two items.
  * 
  * # Panics
- * - In non-release builds, constructing a Merkle Tree will panic if we call the constructer
+ * - In non-release builds, constructing a Merkle Tree will panic if we call the constructor
  * with a vector of fewer than two elements.
  * - In non-release builds, validating a Merkle Tree will panic on Invalid results.
  * 
@@ -49,14 +49,13 @@ enum MerkleBranch<T : Hashable> {
  * 
  * `mrkl_root`: The sha2 hash of the concatenation of the hashes of this `MerkleTree`'s children.
  * 
- * `depth`: The depth of the current node in the overall `MerkleTree`. Counterintuitvely, 
- * leaves have depth `0`.
+ * `height`: The height of the current node in the overall `MerkleTree`. Leaves have height 0.
  */
 pub struct MerkleTree<T : Hashable> {
     left: MerkleBranch<T>,
     right: MerkleBranch<T>,
     mrkl_root: String,
-    depth: usize
+    height: usize
 }
 
 /**
@@ -110,7 +109,7 @@ impl<T: Hashable> MerkleTree<T> {
 
         }
 
-        let mut depth = 1;
+        let mut height = 1;
 
         while mrkl_trees.len() > 1 {
 
@@ -118,12 +117,12 @@ impl<T: Hashable> MerkleTree<T> {
 
             while mrkl_trees.len() > 0 {
 
-                let internal_node = MerkleTree::construct_internal_node(&mut mrkl_trees, depth);
+                let internal_node = MerkleTree::construct_internal_node(&mut mrkl_trees, height);
                 new_mrkl_trees.push(internal_node);
             }
 
             mrkl_trees = new_mrkl_trees;
-            depth += 1;        
+            height += 1;        
         }
         Ok(mrkl_trees.remove(0))
     }
@@ -144,88 +143,41 @@ impl<T: Hashable> MerkleTree<T> {
            
            (MerkleBranch::Branch(ref left_br), MerkleBranch::Branch(ref right_br)) => {
                
-                match (left_br.validate(), right_br.validate()) {
+                match (&left_br.validate(), &right_br.validate()) {
                     
-                    (MrklVR::Valid, MrklVR::Valid) => {
+                    (MrklVR::Valid, MrklVR::Valid) => self.validate_internal_node(left_br, right_br),
 
-                        //Check that current node hash is same as computed hash
-                        let mut hash = String::new();
-                        hash.push_str(&left_br.mrkl_root);
-                        hash.push_str(&right_br.mrkl_root);
-
-                        hash = hash.get_hash();
-                        
-                        if hash == self.mrkl_root && 
-                           self.depth == left_br.depth + 1 &&
-                           self.depth == right_br.depth + 1 
-                        { 
-                               MrklVR::Valid 
-                        }
-                        else if self.depth != left_br.depth + 1 ||
-                                self.depth != right_br.depth + 1
-                        {
-                            debug_assert!(false, "Mismatched depths for internal node.");
-                            MrklVR::InvalidTree
-                        } 
-                        else {
-                            debug_assert!(false, "On internal node: mrkl_root differs from expected."); 
-                            MrklVR::InvalidHash
-                        }
-                    }
                     (MrklVR::InvalidHash, _) => MrklVR::InvalidHash,
+
                     (_, MrklVR::InvalidHash) => MrklVR::InvalidHash,
+
                     (_,_) => MrklVR::InvalidTree,
                 }
             }
-            (MerkleBranch::Leaf(ref left_it, ref left_hash), MerkleBranch::Leaf(ref right_it, ref right_hash)) => {
-                
-                let mut hash  = String::new();
-                hash.push_str( left_hash);
-                hash.push_str(right_hash);
-                
-                hash = hash.get_hash();
-                
-                if  left_it.get_hash() == *left_hash && 
-                    right_it.get_hash() == *right_hash &&
-                    self.mrkl_root == hash &&
-                    self.depth == 0 {
-                    
-                    MrklVR::Valid
-                } else if self.mrkl_root != hash {
-                   
-                    debug_assert!(false, "On leaf node: mrkl_root does not match concatenated hash.");
-                    MrklVR::InvalidHash
-                }
-                else if self.depth != 0 {
-                    debug_assert!(false, "Depth is not zero on fringe node.");
-                    MrklVR::InvalidTree
-                } else {
-
-                    debug_assert!(false, "On leaf node: leaf hash does not equal expected leaf hash");
-                    MrklVR::InvalidHash
-                }
-            }
             (MerkleBranch::Branch(ref branch), MerkleBranch::None) => {
-                if branch.mrkl_root == self.mrkl_root && self.depth == branch.depth + 1 {
+                if branch.mrkl_root == self.mrkl_root && self.height == branch.height + 1 {
                     MrklVR::Valid
                 }
-                else if branch.depth + 1 != self.depth {
-                    debug_assert!(false, "Depth mismatch.");
+                else if branch.height + 1 != self.height {
+                    debug_assert!(false, "height mismatch.");
                     MrklVR::InvalidTree
                 } else {
                     debug_assert!(false, "On internal node: mrkl_root does not match only child\'s root.");
                     MrklVR::InvalidHash
                 }
             }
+            (MerkleBranch::Leaf(ref left_it, ref left_hash), MerkleBranch::Leaf(ref right_it, ref right_hash)) 
+                    => self.validate_fringe_node(left_it, left_hash, right_it, right_hash),
+            
             (MerkleBranch::Leaf(ref left_it, ref left_hash), MerkleBranch::None) => {
                 
                 let mut hash = left_it.get_hash();
                 
-                if &hash == left_hash && hash == self.mrkl_root && self.depth == 0{
+                if &hash == left_hash && hash == self.mrkl_root && self.height == 0{
                     
                     MrklVR::Valid
-                } else if self.depth != 0 {
-                    debug_assert!(false, "Nonzero depth for fringe node.");
+                } else if self.height != 0 {
+                    debug_assert!(false, "Nonzero height for fringe node.");
                     MrklVR::InvalidTree
                 } else {
                     
@@ -236,9 +188,73 @@ impl<T: Hashable> MerkleTree<T> {
             }
             (_,_) => {
                 debug_assert!(false, "Mismatched children for node.");
-
                 MrklVR::InvalidTree
             }
+        }
+    }
+
+    /**
+     * Helper function for `MerkleTree::Validate` which validates an internal node in the Merkle tree.
+     * It first computes the concatenated hash for its two children, and compares that with its
+     * `mrkl_root`. It then checks that the height of its children are one less than its height.
+     */
+    fn validate_internal_node(&self, left_node: &MerkleTree<T>, right_node: &MerkleTree<T>) -> MrklVR {
+
+        let mut hash = String::new();
+        hash.push_str(&left_node.mrkl_root);
+        hash.push_str(&right_node.mrkl_root);
+
+        hash = hash.get_hash();
+        
+        if hash == self.mrkl_root && 
+           self.height == left_node.height + 1 &&
+           self.height == right_node.height + 1 
+        { 
+               MrklVR::Valid 
+        }
+        else if self.height != left_node.height + 1 ||
+                self.height != right_node.height + 1
+        {
+            debug_assert!(false, "Mismatched heights for internal node.");
+            MrklVR::InvalidTree
+        } 
+        else {
+            debug_assert!(false, "On internal node: mrkl_root differs from expected."); 
+            MrklVR::InvalidHash
+        }
+    }
+
+    /**
+     * Helper function for `MerkleTree::Validate` which validates a fringe node in the Merkle tree.
+     * It first computes the concatenated hash for its children, and compares that with its
+     * `mrkl_root`. It then checks that its height is 0.
+     */
+    fn validate_fringe_node(&self, left_it: &T, left_hash: &str, right_it: &T, right_hash: &str)
+            -> MrklVR {
+        
+        let mut hash  = String::new();
+        hash.push_str( left_hash);
+        hash.push_str(right_hash);
+        
+        hash = hash.get_hash();
+        
+        if  left_it.get_hash() == *left_hash && 
+            right_it.get_hash() == *right_hash &&
+            self.mrkl_root == hash &&
+            self.height == 0 {
+            
+            MrklVR::Valid
+        } else if self.mrkl_root != hash {
+           
+            debug_assert!(false, "On leaf node: mrkl_root does not match concatenated hash.");
+            MrklVR::InvalidHash
+        }
+        else if self.height != 0 {
+            debug_assert!(false, "height is not zero on fringe node.");
+            MrklVR::InvalidTree
+        } else {
+            debug_assert!(false, "On leaf node: leaf hash does not equal expected leaf hash");
+            MrklVR::InvalidHash
         }
     }
 
@@ -294,7 +310,7 @@ impl<T: Hashable> MerkleTree<T> {
             left: left_leaf,
             right: right_leaf,
             mrkl_root: hash,
-            depth: 0
+            height: 0
         }
     }
 
@@ -302,7 +318,7 @@ impl<T: Hashable> MerkleTree<T> {
      * Helper function for `MerkleTree::construct`. Creates a `MerkleTree` from the first
      * two elements of `data`, where the children of this `MerkleTree` are other `MerkleTree`s. 
      */
-    fn construct_internal_node(data: &mut Vec<MerkleTree<T>>, depth: usize) -> MerkleTree<T> {
+    fn construct_internal_node(data: &mut Vec<MerkleTree<T>>, height: usize) -> MerkleTree<T> {
         let mut hash = String::new();
 
         let left_branch = MerkleTree::construct_branch(data, &mut hash);
@@ -316,7 +332,7 @@ impl<T: Hashable> MerkleTree<T> {
             left: left_branch,
             right: right_branch,
             mrkl_root: hash,
-            depth
+            height
         }
     }
 }
