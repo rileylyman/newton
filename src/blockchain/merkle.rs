@@ -30,7 +30,7 @@ impl<T: Hashable> MerkleTree<T> {
 
             let first = data.remove(0);
             let first_hash = first.get_hash();
-            let second = data.remove(1);
+            let second = data.remove(0);
             let second_hash = first.get_hash();
 
             let mut combined_hash = String::new();
@@ -67,7 +67,7 @@ impl<T: Hashable> MerkleTree<T> {
             let length = mrkl_trees.len();
             for _ in (0..(length / 2 * 2)).step_by(2) {
                 let left = Box::new(mrkl_trees.remove(0));
-                let right = Box::new(mrkl_trees.remove(1));
+                let right = Box::new(mrkl_trees.remove(0));
 
                 let mut combined_hash = String::new();
                 combined_hash.push_str(&left.mrkl_root);
