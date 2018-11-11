@@ -21,81 +21,90 @@ pub enum MrklVR { //Merkle Validation Result
 }
 
 impl<T: Hashable> MerkleTree<T> {
+
+    fn construct_leaf(data: &mut Vec<T>, hash: &mut String) -> MerkleBranch<T> {
+            
+            let first = data.remove(0);
+            let first_hash = first.get_hash();
+            
+            hash.push_str(&first_hash);
+
+            MerkleBranch::Leaf(first, first_hash)
+    }
+
+    fn construct_branch(data: &mut Vec<MerkleTree<T>>, hash: &mut String) -> MerkleBranch<T> {
+        
+        let first = data.remove(0);
+        hash.push_str(&first.mrkl_root);
+
+        MerkleBranch::Branch(Box::new(first))
+    }
+
+    fn construct_fringe_node(data: &mut Vec<T>) -> MerkleTree<T> {    
+       
+        let mut hash = String::new();
+
+        let left_leaf = MerkleTree::construct_leaf(data, &mut hash);
+
+        let mut right_leaf = MerkleBranch::None;
+        if data.len() > 0 {
+            
+            right_leaf = MerkleTree::construct_leaf(data, &mut hash);
+        }
+        
+        hash = hash.get_hash();
+
+        MerkleTree{
+            left: left_leaf,
+            right: right_leaf,
+            mrkl_root: hash,
+            depth: 0
+        }
+    }
+
+    fn construct_internal_node(data: &mut Vec<MerkleTree<T>>, depth: usize) -> MerkleTree<T> {
+        let mut hash = String::new();
+
+        let left_branch = MerkleTree::construct_branch(data, &mut hash);
+
+        let mut right_branch = MerkleBranch::None;
+        if data.len() > 0 {
+            right_branch = MerkleTree::construct_branch(data, &mut hash);
+            hash = hash.get_hash();   
+        }
+        MerkleTree{
+            left: left_branch,
+            right: right_branch,
+            mrkl_root: hash,
+            depth
+        }
+    }
+
     pub fn construct(data: &mut Vec<T>) -> Self {
         assert!(data.len() > 1);
 
         let mut mrkl_trees: Vec<MerkleTree<T>> = Vec::new();
-        
-        let length = data.len();
-        for _ in (0..length/2*2).step_by(2) {
 
-            let first = data.remove(0);
-            let first_hash = first.get_hash();
-            let second = data.remove(0);
-            let second_hash = second.get_hash();
+        while data.len() > 0 {
 
-            let mut combined_hash = String::new();
-            combined_hash.push_str(&first_hash);
-            combined_hash.push_str(&second_hash);
-            combined_hash = combined_hash.get_hash();
+            let fringe_node = MerkleTree::construct_fringe_node(data);
+            mrkl_trees.push(fringe_node);
 
-            mrkl_trees.push(MerkleTree{
-                left: MerkleBranch::Leaf(first, first_hash),
-                right: MerkleBranch::Leaf(second, second_hash),
-                mrkl_root: combined_hash,
-                depth: 0
-            });
-        }
-
-        for _ in length/2*2..length {
-
-            let first = data.remove(0);
-            let first_hash = first.get_hash();
-            let combined_hash = first.get_hash();
-
-            mrkl_trees.push(MerkleTree{
-                left: MerkleBranch::Leaf(first, first_hash),
-                right: MerkleBranch::None,
-                mrkl_root: combined_hash,
-                depth: 0
-            });
         }
 
         let mut depth = 1;
 
         while mrkl_trees.len() > 1 {
 
-            let length = mrkl_trees.len();
-            for _ in (0..(length / 2 * 2)).step_by(2) {
-                let left = Box::new(mrkl_trees.remove(0));
-                let right = Box::new(mrkl_trees.remove(0));
+            let mut new_mrkl_trees: Vec<MerkleTree<T>> = Vec::new();
 
-                let mut combined_hash = String::new();
-                combined_hash.push_str(&left.mrkl_root);
-                combined_hash.push_str(&right.mrkl_root);
-                combined_hash = combined_hash.get_hash();
+            while mrkl_trees.len() > 0 {
 
-                mrkl_trees.push(MerkleTree{
-                    left: MerkleBranch::Branch(left),
-                    right: MerkleBranch::Branch(right),
-                    mrkl_root: combined_hash,
-                    depth
-                });
+                let internal_node = MerkleTree::construct_internal_node(&mut mrkl_trees, depth);
+                new_mrkl_trees.push(internal_node);
             }
 
-            for _ in length/2*2..length {
-                let left = Box::new(mrkl_trees.remove(0));
-
-                let mut hash = String::new();
-                hash.push_str(&left.mrkl_root);
-
-                mrkl_trees.push(MerkleTree{
-                    left: MerkleBranch::Branch(left),
-                    right: MerkleBranch::None,
-                    mrkl_root: hash,
-                    depth
-                });
-            }
+            mrkl_trees = new_mrkl_trees;
             depth += 1;        
         }
         mrkl_trees.remove(0)
