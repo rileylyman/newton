@@ -15,7 +15,7 @@ fn merkle1() {
         String::from("mj"),
         String::from("john john")
     );
-    let mrkl_tree = merkle::MerkleTree::construct(&mut names);
+    let mrkl_tree = merkle::MerkleTree::construct(&mut names).unwrap();
     
     println!("{}", mrkl_tree);
 

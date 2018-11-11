@@ -80,8 +80,11 @@ impl<T: Hashable> MerkleTree<T> {
         }
     }
 
-    pub fn construct(data: &mut Vec<T>) -> Self {
-        assert!(data.len() > 1);
+    pub fn construct(data: &mut Vec<T>) -> Result<Self, &str> {
+        if data.len() < 1 {
+            debug_assert!(false, "Wrong number of arguments to merkle tree constructor.");
+            return Err("Not enough data to construct Merkle Tree. Must receive at least two items.");
+        }
 
         let mut mrkl_trees: Vec<MerkleTree<T>> = Vec::new();
 
@@ -107,7 +110,7 @@ impl<T: Hashable> MerkleTree<T> {
             mrkl_trees = new_mrkl_trees;
             depth += 1;        
         }
-        mrkl_trees.remove(0)
+        Ok(mrkl_trees.remove(0))
     }
 
     pub fn validate(&self) -> MrklVR { //TODO: add depth checking
@@ -127,13 +130,23 @@ impl<T: Hashable> MerkleTree<T> {
 
                         hash = hash.get_hash();
                         
-                        if hash == self.mrkl_root { MrklVR::Valid }
+                        if hash == self.mrkl_root && 
+                           self.depth == left_br.depth + 1 &&
+                           self.depth == right_br.depth + 1 
+                        { 
+                               MrklVR::Valid 
+                        }
+                        else if self.depth != left_br.depth + 1 ||
+                                self.depth != right_br.depth + 1
+                        {
+                            debug_assert!(false, "Mismatched depths for internal node.");
+                            MrklVR::InvalidTree
+                        } 
                         else {
                             debug_assert!(false, "On internal node: mrkl_root differs from expected."); 
                             MrklVR::InvalidHash
                         }
                     }
-                    (MrklVR::InvalidHash, MrklVR::InvalidHash) => MrklVR::InvalidHash,
                     (MrklVR::InvalidHash, _) => MrklVR::InvalidHash,
                     (_, MrklVR::InvalidHash) => MrklVR::InvalidHash,
                     (_,_) => MrklVR::InvalidTree,
@@ -149,13 +162,18 @@ impl<T: Hashable> MerkleTree<T> {
                 
                 if  left_it.get_hash() == *left_hash && 
                     right_it.get_hash() == *right_hash &&
-                    self.mrkl_root == hash {
+                    self.mrkl_root == hash &&
+                    self.depth == 0 {
                     
                     MrklVR::Valid
                 } else if self.mrkl_root != hash {
                    
                     debug_assert!(false, "On leaf node: mrkl_root does not match concatenated hash.");
                     MrklVR::InvalidHash
+                }
+                else if self.depth != 0 {
+                    debug_assert!(false, "Depth is not zero on fringe node.");
+                    MrklVR::InvalidTree
                 } else {
 
                     debug_assert!(false, "On leaf node: leaf hash does not equal expected leaf hash");
@@ -163,8 +181,12 @@ impl<T: Hashable> MerkleTree<T> {
                 }
             }
             (MerkleBranch::Branch(ref branch), MerkleBranch::None) => {
-                if branch.mrkl_root == self.mrkl_root {
+                if branch.mrkl_root == self.mrkl_root && self.depth == branch.depth + 1 {
                     MrklVR::Valid
+                }
+                else if branch.depth + 1 != self.depth {
+                    debug_assert!(false, "Depth mismatch.");
+                    MrklVR::InvalidTree
                 } else {
                     debug_assert!(false, "On internal node: mrkl_root does not match only child\'s root.");
                     MrklVR::InvalidHash
@@ -174,9 +196,12 @@ impl<T: Hashable> MerkleTree<T> {
                 
                 let mut hash = left_it.get_hash();
                 
-                if &hash == left_hash && hash == self.mrkl_root {
+                if &hash == left_hash && hash == self.mrkl_root && self.depth == 0{
                     
                     MrklVR::Valid
+                } else if self.depth != 0 {
+                    debug_assert!(false, "Nonzero depth for fringe node.");
+                    MrklVR::InvalidTree
                 } else {
                     
                     debug_assert!(false, "On lonely leaf node: hash does not match.");
@@ -185,22 +210,7 @@ impl<T: Hashable> MerkleTree<T> {
             
             }
             (_,_) => {
-
-                let mut err_msg = String::new();
-                err_msg.push_str("Mismatched branch and leaf children for node: ");
-                
-                match &self.left {
-                    MerkleBranch::Branch(_) => err_msg.push_str("Left child was a branch and "),
-                    MerkleBranch::Leaf(_, _) => err_msg.push_str("Left child was a leaf and "),
-                    MerkleBranch::None => err_msg.push_str("Left child was none and ")
-                }
-                match &self.right {
-                    MerkleBranch::Branch(_) => err_msg.push_str("right child was a branch"),
-                    MerkleBranch::Leaf(_, _) => err_msg.push_str("right child was a leaf"),
-                    MerkleBranch::None => err_msg.push_str("right child was none")
-                }
-
-                debug_assert!(false, err_msg);
+                debug_assert!(false, "Mismatched children for node.");
 
                 MrklVR::InvalidTree
             }
