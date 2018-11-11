@@ -9,16 +9,14 @@ fn hash_pointer() {
 
 #[test]
 fn merkle1() {
-    let mut names = vec!(String::from("sally"),
+    let names = vec!(String::from("sally"),
         String::from("alice"),
         String::from("ronnie"),
         String::from("mj"),
         String::from("john john")
     );
-    let mrkl_tree = merkle::MerkleTree::construct(&mut names).unwrap();
+    let mrkl_tree = merkle::MerkleTree::construct(names).unwrap();
     
-    println!("{}", mrkl_tree);
-
     match mrkl_tree.validate() {
         merkle::MrklVR::Valid => {
             println!("Valid");
