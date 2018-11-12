@@ -350,13 +350,14 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
 
             Some(r) => {
                 hash.push_str(&r.mrkl_root);
-                hash = hash.get_hash();
 
                 right_has_correct_height = self.height == r.height + 1;
             }
 
             None => {}
         }
+
+        hash = hash.get_hash();
     
         if hash == self.mrkl_root && 
            self.height == left_node.height + 1 &&
@@ -390,7 +391,6 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
 
             (Some(r), Some(r_hash)) => {
                 hash.push_str(&r_hash);
-                hash = hash.get_hash();
 
                 right_hash_is_valid = r.get_hash() == r_hash;
             }
@@ -406,6 +406,9 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
                 ));
             }
         }    
+
+        hash = hash.get_hash();
+
         
         if  left_it.get_hash() == *left_hash && 
             right_hash_is_valid &&
@@ -511,9 +514,9 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
         if data.len() > 0 {
             
             right_leaf = MerkleTree::construct_leaf(data, &mut hash);
-            hash = hash.get_hash();
+            
         }
-        
+        hash = hash.get_hash();
 
         Ok(MerkleTree{
             left: left_leaf,
@@ -535,8 +538,11 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
         let mut right_branch = Empty;
         if data.len() > 0 {
             right_branch = MerkleTree::construct_branch(data, &mut hash);
-            hash = hash.get_hash();   
+               
         }
+
+        hash = hash.get_hash();
+
         Ok(MerkleTree {
             left: left_branch,
             right: right_branch,
