@@ -32,3 +32,28 @@ fn merkle1() {
         }
     }
 }
+
+#[test]
+fn merkle2() {
+    let mut v = Vec::new();
+    for i in 1..10000 {
+        v.push(i.to_string());
+    }
+    let m_tree = merkle::MerkleTree::construct(v).unwrap();
+
+    match m_tree.validate() {
+        merkle::MrklVR::Valid => {
+            println!("Valid");
+            assert!(true);
+        }
+        merkle::MrklVR::InvalidHash(x) => {
+            println!("Invalid Hash: {}", x);
+            assert!(false);
+        }
+        merkle::MrklVR::InvalidTree(x) => {
+            println!("Invalid Tree: {}", x);
+            assert!(false);
+        }
+    }
+
+}

@@ -40,7 +40,7 @@ use self::{
  * 
  * A child can also be `MerkleBranch::None`, if it contains no information.
  */
-enum MerkleBranch<T : Hashable> {
+enum MerkleBranch<T : Hashable + Ord + Clone> {
     Branch(Box<MerkleTree<T>>),
     Leaf(T, String),
     Partial(String),
@@ -59,11 +59,11 @@ enum MerkleBranch<T : Hashable> {
  * 
  * `height`: The height of the current node in the overall `MerkleTree`. Leaves have height 0.
  */
-pub struct MerkleTree<T : Hashable> {
+pub struct MerkleTree<T : Hashable + Ord + Clone> {
     left: MerkleBranch<T>,
     right: MerkleBranch<T>,
     mrkl_root: String,
-    height: usize
+    height: usize 
 }
 
 /**
@@ -87,7 +87,7 @@ pub enum MrklVR {
     InvalidTree(String)  //of what went wrong
 }
 
-impl<T: Hashable> MerkleTree<T> {
+impl<T: Hashable + Ord + Clone> MerkleTree<T> {
 
 
     /**
@@ -109,12 +109,16 @@ impl<T: Hashable> MerkleTree<T> {
      *  x        y        z
      * 
      * # Panics
-     * In non-release builds, will panic if `data.len()` is less than 2. 
+     * In non-release builds, will panic if `data.len()` is less than 2.
      * 
      * # Errors
+     * May return an error if it fails to construct leaves correctly.
      * Will return an error result if the length of `data` is less than 2. 
      */
     pub fn construct(mut data: Vec<T>) -> Result<Self, String> {
+
+        data.sort();
+
         if data.len() < 1 {
             debug_assert!(false, "Wrong number of arguments to merkle tree constructor.");
 
@@ -128,7 +132,10 @@ impl<T: Hashable> MerkleTree<T> {
         while data.len() > 0 {
 
             let fringe_node = MerkleTree::construct_fringe_node(&mut data);
-            mrkl_trees.push(fringe_node);
+            match fringe_node {
+                Ok(node) => mrkl_trees.push(node),
+                Err(msg) => { return Err(msg); }
+            }
 
         }
 
@@ -141,7 +148,11 @@ impl<T: Hashable> MerkleTree<T> {
             while mrkl_trees.len() > 0 {
 
                 let internal_node = MerkleTree::construct_internal_node(&mut mrkl_trees, height);
-                new_mrkl_trees.push(internal_node);
+                match internal_node {
+                    Ok(node) => new_mrkl_trees.push(node),
+                    Err(msg) => { return Err(msg); }
+                }
+                
             }
 
             mrkl_trees = new_mrkl_trees;
@@ -149,6 +160,49 @@ impl<T: Hashable> MerkleTree<T> {
         }
         Ok(mrkl_trees.remove(0))
     }
+
+    /**
+     * A destructive method which prunes a Merkle tree, only keeping branches which
+     * lead to the elements specified in `to_keep`. Unnecessary branches are converted 
+     * to `MerkleBranch::Partial(hash)`, where hash is the value of the `mrkl_root` of
+     * the node that was pruned. 
+     * 
+     * *Note*: After a Merkle tree has been pruned, you must use the method `validate_pruned` 
+     * instad of `validate` to check if the tree is valid.
+     * 
+     * # Arguments
+     * `to_keep`: An array slice which lists the leaves you wish to keep in the Merkle tree.
+     * 
+     * # Examples
+     *  
+     * Consider the following scenario:
+     * 
+     * Calling `prune` on the left tree with `to_keep=[y]` yields the tree on the right.
+     *           
+     *           root                           root
+     *          /    \                         /    \
+     *         /      \                       /      \
+     *        /        \                     /        \
+     *       /          \     -->   -->     /          \
+     *      /            \                 /            \
+     *     h1            h2               h1            partial  
+     *    /  \          /  \             /  \          
+     *   /    \        /    \           /    \            
+     *  /      \      /      \         /      \      
+     * hx      hy    hz       hw     partial   hy           
+     * |       |     |        |                |
+     * x       y     z        w                y
+     * 
+     * In the resulting tree, the right child of `root` and the left child of `h1` are now partial.
+     *
+     */
+    /*pub fn prune(&self, to_keep: &[T]) -> MerkleTree<T> {
+
+    }*/
+
+    /*pub fn contains(&self, item: &T) -> bool {
+
+    } */
 
     /**
      * Validates a given instance of `MerkleTree`.
@@ -166,7 +220,7 @@ impl<T: Hashable> MerkleTree<T> {
      * where a right item hash is given but no right item is given, or vice versa. Note that in 
      * release builds this will cause `validate` to return `MrklVR::InvalidHash`.
      */
-    pub fn validate(&self) -> MrklVR {
+    pub fn validate(&self) -> MrklVR { //TODO~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ actually hash single children
         self._validate(false)
     }
 
@@ -447,7 +501,7 @@ impl<T: Hashable> MerkleTree<T> {
      * first two elements of `data`, where the children of this `MerkleTree` are
      * leaves.
      */
-    fn construct_fringe_node(data: &mut Vec<T>) -> MerkleTree<T> {    
+    fn construct_fringe_node(data: &mut Vec<T>) -> Result<MerkleTree<T>, String> {    
        
         let mut hash = String::new();
 
@@ -461,19 +515,19 @@ impl<T: Hashable> MerkleTree<T> {
         }
         
 
-        MerkleTree{
+        Ok(MerkleTree{
             left: left_leaf,
             right: right_leaf,
             mrkl_root: hash,
             height: 0
-        }
+        })
     }
 
     /**
      * Helper function for `MerkleTree::construct`. Creates a `MerkleTree` from the first
      * two elements of `data`, where the children of this `MerkleTree` are other `MerkleTree`s. 
      */
-    fn construct_internal_node(data: &mut Vec<MerkleTree<T>>, height: usize) -> MerkleTree<T> {
+    fn construct_internal_node(data: &mut Vec<MerkleTree<T>>, height: usize) -> Result<MerkleTree<T>, String> {
         let mut hash = String::new();
 
         let left_branch = MerkleTree::construct_branch(data, &mut hash);
@@ -483,11 +537,11 @@ impl<T: Hashable> MerkleTree<T> {
             right_branch = MerkleTree::construct_branch(data, &mut hash);
             hash = hash.get_hash();   
         }
-        MerkleTree{
+        Ok(MerkleTree {
             left: left_branch,
             right: right_branch,
             mrkl_root: hash,
             height
-        }
+        })
     }
 }
