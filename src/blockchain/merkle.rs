@@ -143,49 +143,30 @@ impl<T: Hashable> MerkleTree<T> {
            
            (MerkleBranch::Branch(ref left_br), MerkleBranch::Branch(ref right_br)) => {
                
-                match (&left_br.validate(), &right_br.validate()) {
+                match (left_br.validate(), right_br.validate()) {
                     
-                    (MrklVR::Valid, MrklVR::Valid) => self.validate_internal_node(left_br, right_br),
+                    (MrklVR::Valid, MrklVR::Valid) => self.validate_internal_node(&left_br, Some(&right_br)),
 
-                    (MrklVR::InvalidHash, _) => MrklVR::InvalidHash,
-
-                    (_, MrklVR::InvalidHash) => MrklVR::InvalidHash,
+                    (result @ MrklVR::InvalidHash, _) | (_, result @ MrklVR::InvalidHash) => result,
 
                     (_,_) => MrklVR::InvalidTree,
                 }
             }
             (MerkleBranch::Branch(ref branch), MerkleBranch::None) => {
-                if branch.mrkl_root == self.mrkl_root && self.height == branch.height + 1 {
-                    MrklVR::Valid
+
+                match branch.validate() {
+                    MrklVR::Valid => self.validate_internal_node(branch, None),
+                    result @ MrklVR::InvalidHash => result,
+                    result @ MrklVR::InvalidTree => result
                 }
-                else if branch.height + 1 != self.height {
-                    debug_assert!(false, "height mismatch.");
-                    MrklVR::InvalidTree
-                } else {
-                    debug_assert!(false, "On internal node: mrkl_root does not match only child\'s root.");
-                    MrklVR::InvalidHash
-                }
+                
             }
             (MerkleBranch::Leaf(ref left_it, ref left_hash), MerkleBranch::Leaf(ref right_it, ref right_hash)) 
-                    => self.validate_fringe_node(left_it, left_hash, right_it, right_hash),
+                    => self.validate_fringe_node(left_it, left_hash, Some(right_it), Some(right_hash)),
             
-            (MerkleBranch::Leaf(ref left_it, ref left_hash), MerkleBranch::None) => {
-                
-                let mut hash = left_it.get_hash();
-                
-                if &hash == left_hash && hash == self.mrkl_root && self.height == 0{
+            (MerkleBranch::Leaf(ref left_it, ref left_hash), MerkleBranch::None) 
+                    => self.validate_fringe_node(left_it, left_hash, None, None),
                     
-                    MrklVR::Valid
-                } else if self.height != 0 {
-                    debug_assert!(false, "Nonzero height for fringe node.");
-                    MrklVR::InvalidTree
-                } else {
-                    
-                    debug_assert!(false, "On lonely leaf node: hash does not match.");
-                    MrklVR::InvalidHash
-                }
-            
-            }
             (_,_) => {
                 debug_assert!(false, "Mismatched children for node.");
                 MrklVR::InvalidTree
@@ -193,27 +174,45 @@ impl<T: Hashable> MerkleTree<T> {
         }
     }
 
+
+    /*
+    --------------------------------------------------------------------------------------------------------
+    |                                   Private MerkleTree methods below                                   |
+    --------------------------------------------------------------------------------------------------------
+    */
+
+
     /**
      * Helper function for `MerkleTree::Validate` which validates an internal node in the Merkle tree.
      * It first computes the concatenated hash for its two children, and compares that with its
      * `mrkl_root`. It then checks that the height of its children are one less than its height.
      */
-    fn validate_internal_node(&self, left_node: &MerkleTree<T>, right_node: &MerkleTree<T>) -> MrklVR {
+    fn validate_internal_node(&self, left_node: &MerkleTree<T>, right_node: Option<&MerkleTree<T>>) -> MrklVR {
 
         let mut hash = String::new();
         hash.push_str(&left_node.mrkl_root);
-        hash.push_str(&right_node.mrkl_root);
 
-        hash = hash.get_hash();
-        
+        let mut right_has_correct_height = true;
+        match right_node {
+
+            Some(r) => {
+                hash.push_str(&r.mrkl_root);
+                hash = hash.get_hash();
+
+                right_has_correct_height = self.height == r.height + 1;
+            }
+
+            None => {}
+        }
+    
         if hash == self.mrkl_root && 
            self.height == left_node.height + 1 &&
-           self.height == right_node.height + 1 
+           right_has_correct_height
         { 
                MrklVR::Valid 
         }
         else if self.height != left_node.height + 1 ||
-                self.height != right_node.height + 1
+                right_has_correct_height
         {
             debug_assert!(false, "Mismatched heights for internal node.");
             MrklVR::InvalidTree
@@ -229,17 +228,28 @@ impl<T: Hashable> MerkleTree<T> {
      * It first computes the concatenated hash for its children, and compares that with its
      * `mrkl_root`. It then checks that its height is 0.
      */
-    fn validate_fringe_node(&self, left_it: &T, left_hash: &str, right_it: &T, right_hash: &str)
+    fn validate_fringe_node(&self, left_it: &T, left_hash: &str, right_it: Option<&T>, right_hash: Option<&str>)
             -> MrklVR {
         
         let mut hash  = String::new();
         hash.push_str( left_hash);
-        hash.push_str(right_hash);
+
+        let mut right_hash_is_valid = true;
+        match (right_it, right_hash) {
+
+            (Some(r), Some(r_hash)) => {
+                hash.push_str(&r_hash);
+                hash = hash.get_hash();
+
+                right_hash_is_valid = r.get_hash() == r_hash;
+            }
+
+            (_,_) => {}
+        }
         
-        hash = hash.get_hash();
         
         if  left_it.get_hash() == *left_hash && 
-            right_it.get_hash() == *right_hash &&
+            right_hash_is_valid &&
             self.mrkl_root == hash &&
             self.height == 0 {
             
@@ -302,9 +312,9 @@ impl<T: Hashable> MerkleTree<T> {
         if data.len() > 0 {
             
             right_leaf = MerkleTree::construct_leaf(data, &mut hash);
+            hash = hash.get_hash();
         }
         
-        hash = hash.get_hash();
 
         MerkleTree{
             left: left_leaf,
