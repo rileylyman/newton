@@ -68,8 +68,8 @@ pub struct MerkleTree<T : Hashable + Ord + Clone> {
     left: MerkleBranch<T>,
     right: MerkleBranch<T>,
     
-    l_bound: T, //TODO: Make this option and delete it for pruned nodes
-    r_bound: T,
+    l_bound: T, //#####################################################
+    r_bound: T, // TODO: Pruning is worthless if we still have copies. Make Option<T>
 
     mrkl_root: String,
     
@@ -215,7 +215,8 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
      * - Will return false if `to_keep` is empty, since this would be effectively pruning the
      * entire tree away. 
      * - There are a number of errors that could occur when pruning malformed trees, so it may be advisable
-     * to validate a tree before pruning, unless you are certain the tree is valid. 
+     * to validate a tree before pruning, unless you are certain the tree is valid. One such error is that
+     * there is an empty branch as the left child.
      * 
      */
     pub fn prune(&mut self, to_keep: &[T]) -> bool {
@@ -224,95 +225,24 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
         // no way for us to check whether all the elements in `to_keep`
         // are contained within the tree, and therefore no way for us to 
         // recurse properly. All the elements of the tree must be sorted as
-        // well, which is also verifed by validate. TODO
-        
+        // well, which is also verifed by validate. 
         if let Valid = self.validate() {} else { // Check if tree is valid
             return false;
         }
 
-        let mut result = true;
-        if to_keep.len() <= 0 { return false; } // Cannot prune an entire tree
+        // We also cannot prune an entire tree. An alternative to this would
+        // be to grab the `mrkl_root` from the root node.
+        if to_keep.len() <= 0 { return false; } 
 
-        //TODO: Make sure all elements in to_keep are in tree
-
-        let mut prune_left = true;
+        // All elements of `to_keep` must be contained within the Merkle tree.
+        // Otherwise we would encounter situations where we do not prune a branch
+        // even though it contains no leaves we wish to keep.
         for element in to_keep {
-            if *element <= self.l_bound { prune_left = false; }
+            if !self.contains(element).unwrap() { return false; }
         }
 
-        result = result && MerkleTree::prune_recurse(to_keep, &mut self.left, prune_left);
-
-        let mut prune_right = true; {           // We start a new scope here since self.find_min_right()
-                                                // borrows self.right
-            let min_right;                      // We use the reference to one of the leaves of 
-            match self.find_min_right() {       // the tree to compute whether or not all the elements
-                Ok(x) => { min_right = x; }     // of to_keep are less than the min_right value,
-                _ => { return result; }         // but after that we stop borrowing immutably so we can
-            }                                   // mutably borrow when mutating the right branch.
-
-            for element in to_keep {
-                if *element >= *min_right {
-                    prune_right = false;
-                }
-            }
-        }
-
-        result && MerkleTree::prune_recurse(to_keep, &mut self.right, prune_right)
-    }
-
-
-    fn prune_recurse(to_keep: &[T], branch: &mut MerkleBranch<T>, should_prune: bool) -> bool {
+        self._prune(to_keep)
         
-        let compute_branch = |br: &mut MerkleBranch<T>| {
-            match br {
-                Branch(node) =>  { Ok(Partial(node.mrkl_root.clone())) }
-                Leaf(_, hash) => { Ok(Partial(hash.clone())) }
-                Partial(hash) => { Ok(Partial(hash.clone())) }
-                _ => Err(String::from("Cannot prune empty branch"))
-            }
-        };
-        
-        if should_prune {
-            match compute_branch(branch) {
-                Ok(pruned) => { *branch = pruned; true }
-                _ => { return false; }
-            }
-        } else {
-            match branch {
-                Branch(node) => { node.prune(to_keep) }
-                _ => { true }
-            }
-        }
-    }
-
-    /**
-     * Finds the leftmost leaf in the right child of the given Merkle tree. This will 
-     * be the minimum value to the right of the current Merkle root if the tree is sorted.
-     * 
-     * #Errors
-     * Will return an error if the right branch is partial or empty.  
-     */
-    fn find_min_right(&self) -> Result<&T, String> {
-        match &self.right {
-            Branch(node) => node.find_min(),
-            Leaf(value,_) => Ok(value),
-            _ => Err(String::from("There is nowhere to search to the right to find the minimum element"))
-        }
-    }
-
-    /**
-     * Finds the leftmost leaf value in a given Merkle Tree. This will be the 
-     * minimum value if the tree is sorted. 
-     * 
-     * # Errors
-     * Will return an error if the left branch is partial or empty.
-     */
-    fn find_min(&self) -> Result<&T, String> {
-        match &self.left {
-            Branch(node) => node.find_min(),
-            Leaf(value, _) => Ok(value),
-            _ => Err(String::from("Couldn't go left anymore when finding minimum element"))
-        }
     }
 
     /**
@@ -382,10 +312,116 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
         self._validate(true)
     }
 
+    /*
+    --------------------------------------------------------------------------------------------------------
+    |                                      Private pruning methods                                         |
+    --------------------------------------------------------------------------------------------------------
+    */
+
+    /**
+     * Helper function that does the heavy lifting for `prune`. We need to check that all
+     * elements of `to_keep` are contained within the tree, and otherwise return false. However,
+     * if we did that at every step, then there will usually be some subtree which we check that
+     * does not contain all values of `to_keep`. Therefore, we do this check only once when we
+     * first call `prune`, and then we transfer control to `_prune`. 
+     */
+    fn _prune(&mut self, to_keep: &[T]) -> bool {
+
+        let mut result = true;
+
+
+        let mut prune_left = true;
+        for element in to_keep {
+            if *element <= self.l_bound { prune_left = false; }
+        }
+
+        result = result && MerkleTree::prune_recurse(to_keep, &mut self.left, prune_left);
+
+        let mut prune_right = true; {           // We start a new scope here since self.find_min_right()
+                                                // borrows self.right
+            let min_right;                      // We use the reference to one of the leaves of 
+            match self.find_min_right() {       // the tree to compute whether or not all the elements
+                Ok(x) => { min_right = x; }     // of to_keep are less than the min_right value,
+                _ => { return result; }         // but after that we stop borrowing immutably so we can
+            }                                   // mutably borrow when mutating the right branch.
+
+            for element in to_keep {
+                if *element >= *min_right {
+                    prune_right = false;
+                }
+            }
+        }
+
+        result && MerkleTree::prune_recurse(to_keep, &mut self.right, prune_right)
+    }
+
+
+    /**
+     * Helper function that handles recursion for `prune`. If we want to prune the branch, 
+     * it handles computing the `Partial` branch. Otherwise, it attempts to recurse on that
+     * `Branch`, and otherwise stops recursion.
+     * 
+     * # Errors
+     * Will error given a situation where `prune` attempts to prune an empty branch. This is impossible,
+     * since we cannot create a `Partial` branch if we have no data. However, this should never 
+     * happen in practice, due to the checks `prune` runs before pruning a tree.  
+     */
+    fn prune_recurse(to_keep: &[T], branch: &mut MerkleBranch<T>, should_prune: bool) -> bool {
+        
+        let compute_branch = |br: &mut MerkleBranch<T>| {
+            match br {
+                Branch(node) =>  { Ok(Partial(node.mrkl_root.clone())) }
+                Leaf(_, hash) => { Ok(Partial(hash.clone())) }
+                Partial(hash) => { Ok(Partial(hash.clone())) }
+                _ => Err(String::from("Cannot prune empty branch"))
+            }
+        };
+        // This error value should be unreachable. It would require us to have searched down the branch
+        // to find a value to compare to to_keep, and then come to find out that the branch is empty.
+        
+        if should_prune {
+            *branch = compute_branch(branch).unwrap(); true
+        } else {
+            match branch {
+                Branch(node) => { node.prune(to_keep) }
+                _ => { true } // There is no more recursion to do. We either have that one of to_keep is
+            }                 // equal to the leaf value, or that it is an empty branch and so we shan't recurse.
+        }
+    }
+
+    /**
+     * Finds the leftmost leaf in the right child of the given Merkle tree. This will 
+     * be the minimum value to the right of the current Merkle root if the tree is sorted.
+     * 
+     * #Errors
+     * Will return an error if the right branch is partial or empty.  
+     */
+    fn find_min_right(&self) -> Result<&T, String> {
+        match &self.right {
+            Branch(node) => node.find_min(),
+            Leaf(value,_) => Ok(value),
+            _ => Err(String::from("There is nowhere to search to the right to find the minimum element"))
+        }
+    }
+
+    /**
+     * Finds the leftmost leaf value in a given Merkle Tree. This will be the 
+     * minimum value if the tree is sorted. 
+     * 
+     * # Errors
+     * Will return an error if the left branch is partial or empty.
+     */
+    fn find_min(&self) -> Result<&T, String> {
+        match &self.left {
+            Branch(node) => node.find_min(),
+            Leaf(value, _) => Ok(value),
+            _ => Err(String::from("Couldn't go left anymore when finding minimum element"))
+        }
+    }
 
     /*
     --------------------------------------------------------------------------------------------------------
-    |                                   Private MerkleTree methods below                                   |
+    |                                   Private validation methods                                         |
     --------------------------------------------------------------------------------------------------------
     */
 
@@ -395,6 +431,9 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
      */
     fn _validate(&self, pruned: bool) -> MrklVR {
        
+        //##################################################################
+        //TODO: make sure leaves are in order.
+
         match (&self.left, &self.right) {
            
            /*
@@ -612,6 +651,11 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
         }
     }
 
+    /*
+    --------------------------------------------------------------------------------------------------------
+    |                                    Private construct methods                                         |
+    --------------------------------------------------------------------------------------------------------
+    */
 
     /**
      * Helper function for `MerkleTree::construct`. Pops off the first element of 
