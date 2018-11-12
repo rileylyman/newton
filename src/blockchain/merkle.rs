@@ -55,14 +55,24 @@ enum MerkleBranch<T : Hashable + Ord + Clone> {
  * 
  * `right`: The right child of the `MerkleTree`, held within a `MerkleBranch` enumeration.
  * 
+ * `l_bound`: The largest element in the Merkle tree who has `left` as an ancestor
+ * 
+ * `r_bound`: The largest element in the Merkle tree who has `right` as an ancestor
+ * 
  * `mrkl_root`: The hash of each of this node's children -- sha2(left.mrkl_root || right.mrkl_root).
  * 
  * `height`: The height of the current node in the overall `MerkleTree`. Leaves have height 0.
  */
 pub struct MerkleTree<T : Hashable + Ord + Clone> {
+    
     left: MerkleBranch<T>,
     right: MerkleBranch<T>,
+    
+    l_bound: T,
+    r_bound: T,
+
     mrkl_root: String,
+    
     height: usize 
 }
 
@@ -97,10 +107,10 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
      * - `data`: A vector of data which will be used to build the `MerkleTree` instance. For example, if data
      * was `vec!(x, y, z)`, then the resulting `MerkleTree` would be
      * 
-     *     h(h(h(x)||h(y))||h(z))
+     *     h(h(h(x)||h(y))||h(h(z)))
      *         /        \
      *        /          \ 
-     *  h(h(x)||h(y))    h(z)
+     *  h(h(x)||h(y))    h(h(z))
      *     /   \          |
      *    /     \         |
      *   /       \        |
@@ -220,7 +230,7 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
      * where a right item hash is given but no right item is given, or vice versa. Note that in 
      * release builds this will cause `validate` to return `MrklVR::InvalidHash`.
      */
-    pub fn validate(&self) -> MrklVR { //TODO~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ actually hash single children
+    pub fn validate(&self) -> MrklVR { 
         self._validate(false)
     }
 
@@ -518,9 +528,23 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
         }
         hash = hash.get_hash();
 
+        let l_bound;
+        match left_leaf {
+            Leaf(ref value,_) => { l_bound = value.clone(); }
+            _ => { return Err(String::from("Leaf contains no data")); }
+        }
+
+        let mut r_bound = l_bound.clone();
+        match right_leaf {
+            Leaf(ref value,_) => { r_bound = value.clone(); }
+            _ => {}
+        }
+
         Ok(MerkleTree{
             left: left_leaf,
             right: right_leaf,
+            l_bound,
+            r_bound,
             mrkl_root: hash,
             height: 0
         })
@@ -543,9 +567,23 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
 
         hash = hash.get_hash();
 
+        let l_bound;
+        match left_branch {
+            Branch(ref node) => { l_bound = node.r_bound.clone(); }
+            _ => { return Err(String::from("There was no r_bound to clone")); }
+        }
+
+        let mut r_bound = l_bound.clone();
+        match right_branch {
+            Branch(ref node) => { r_bound = node.r_bound.clone(); }
+            _ => {}
+        }
+
         Ok(MerkleTree {
             left: left_branch,
             right: right_branch,
+            l_bound,
+            r_bound,
             mrkl_root: hash,
             height
         })
