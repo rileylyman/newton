@@ -17,8 +17,8 @@ fn merkle1() {
     );
     let mrkl_tree = merkle::MerkleTree::construct(names).unwrap();
     
-    assert!(mrkl_tree.contains(&String::from("alice")));
-    assert!(!mrkl_tree.contains(&String::from("mje")));
+    assert!(mrkl_tree.contains(&String::from("alice")).unwrap());
+    assert!(!mrkl_tree.contains(&String::from("mje")).unwrap());
 
     match mrkl_tree.validate() {
         merkle::MrklVR::Valid => {
@@ -45,10 +45,10 @@ fn merkle2() {
     let m_tree = merkle::MerkleTree::construct(v).unwrap();
 
     for i in 1..10000 {
-        assert!(m_tree.contains(&i.to_string()));
+        assert!(m_tree.contains(&i.to_string()).unwrap());
     }
     for i in 10000..20000 {
-        assert!(!m_tree.contains(&i.to_string()));
+        assert_eq!(m_tree.contains(&i.to_string()).unwrap(), false);
     }
 
     match m_tree.validate() {
