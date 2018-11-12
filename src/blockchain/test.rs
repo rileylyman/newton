@@ -22,12 +22,12 @@ fn merkle1() {
             println!("Valid");
             assert!(true);
         }
-        merkle::MrklVR::InvalidHash => {
-            println!("Invalid Hash");
+        merkle::MrklVR::InvalidHash(x) => {
+            println!("Invalid Hash: {}", x);
             assert!(false);
         }
-        _ => {
-            println!("Invalid Tree");
+        merkle::MrklVR::InvalidTree(x) => {
+            println!("Invalid Tree: {}", x);
             assert!(false);
         }
     }

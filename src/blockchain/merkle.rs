@@ -8,7 +8,6 @@
  * # Panics
  * - In non-release builds, constructing a Merkle Tree will panic if we call the constructor
  * with a vector of fewer than two elements.
- * - In non-release builds, validating a Merkle Tree will panic on Invalid results.
  * 
  * # Examples
  * 
@@ -73,8 +72,8 @@ pub struct MerkleTree<T : Hashable> {
  */
 pub enum MrklVR {
     Valid,
-    InvalidHash,
-    InvalidTree
+    InvalidHash(String), //String values contain an error message with a description
+    InvalidTree(String)  //of what went wrong
 }
 
 impl<T: Hashable> MerkleTree<T> {
@@ -136,7 +135,9 @@ impl<T: Hashable> MerkleTree<T> {
      * of each result.
      * 
      * # Panics
-     * In non-release builds, will panic if the computer validation result is not `MrklVR::Valid`. 
+     * In non-release builds panics if, when validating a fringe node, it encounters a situation
+     * where a right item hash is given but no right item is given, or vice versa. Note that in 
+     * release builds this will cause `validate` to return `MrklVR::InvalidHash`.
      */
     pub fn validate(&self) -> MrklVR {
        
@@ -148,16 +149,16 @@ impl<T: Hashable> MerkleTree<T> {
                     
                     (Valid, Valid) => self.validate_internal_node(&left_br, Some(&right_br)),
 
-                    (result @ InvalidHash, _) | (_, result @ InvalidHash) => result,
+                    (result @ InvalidHash(_), _) | (_, result @ InvalidHash(_)) => result,
 
-                    (_,_) => InvalidTree,
+                    (result @ _,_) => result,
                 }
             }
             (MerkleBranch::Branch(ref branch), MerkleBranch::None) => {
 
                 match branch.validate() {
                     Valid => self.validate_internal_node(branch, None),
-                    result @ InvalidHash | result @ InvalidTree => result
+                    result @ InvalidHash(_) | result @ InvalidTree(_) => result
                 }
                 
             }
@@ -167,10 +168,7 @@ impl<T: Hashable> MerkleTree<T> {
             (MerkleBranch::Leaf(ref left_it, ref left_hash), MerkleBranch::None) 
                     => self.validate_fringe_node(left_it, left_hash, None, None),
                     
-            (_,_) => {
-                debug_assert!(false, "Mismatched children for node.");
-                InvalidTree
-            }
+            (_,_) => InvalidTree(String::from("Malformed tree"))
         }
     }
 
@@ -186,6 +184,9 @@ impl<T: Hashable> MerkleTree<T> {
      * Helper function for `MerkleTree::Validate` which validates an internal node in the Merkle tree.
      * It first computes the concatenated hash for its two children, and compares that with its
      * `mrkl_root`. It then checks that the height of its children are one less than its height.
+     * 
+     * If `right_node` is `Option::None`, then the function will proceed accordingly by treating
+     * the `MerkleTree` as a node with a single child.
      */
     fn validate_internal_node(&self, left_node: &MerkleTree<T>, right_node: Option<&MerkleTree<T>>) -> MrklVR {
 
@@ -214,12 +215,10 @@ impl<T: Hashable> MerkleTree<T> {
         else if self.height != left_node.height + 1 ||
                 right_has_correct_height
         {
-            debug_assert!(false, "Mismatched heights for internal node.");
-            InvalidTree
+            InvalidTree(String::from("An internal node has height which differs from 1 + (child height)"))
         } 
-        else {
-            debug_assert!(false, "On internal node: mrkl_root differs from expected."); 
-            InvalidHash
+        else { 
+            InvalidHash(String::from("An internal node has an unexpected mrkl_root"))
         }
     }
 
@@ -244,7 +243,16 @@ impl<T: Hashable> MerkleTree<T> {
                 right_hash_is_valid = r.get_hash() == r_hash;
             }
 
-            (_,_) => {}
+            (None, None) => {}
+
+            (_,_) => {
+                debug_assert!(false, 
+                    "Upon validating a fringe node, expected both right_it and right_hash to be None"
+                );
+                return InvalidTree(String::from(
+                    "Upon validating a fringe node, expected both right_it and right_hash to be None"
+                ));
+            }
         }
         
         
@@ -255,16 +263,12 @@ impl<T: Hashable> MerkleTree<T> {
             
             Valid
         } else if self.mrkl_root != hash {
-           
-            debug_assert!(false, "On leaf node: mrkl_root does not match concatenated hash.");
-            InvalidHash
+            InvalidHash(String::from("A fringe node has an unexpected mrkl_root"))
         }
         else if self.height != 0 {
-            debug_assert!(false, "height is not zero on fringe node.");
-            InvalidTree
+            InvalidTree(String::from("A fringe node has nonzero height"))
         } else {
-            debug_assert!(false, "On leaf node: leaf hash does not equal expected leaf hash");
-            InvalidHash
+            InvalidHash(String::from("A leaf's hash failed a hash check"))
         }
     }
 
