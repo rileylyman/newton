@@ -1,5 +1,9 @@
 /*!
- * A Merkle Tree implementation. 
+ * A Merkle Tree implementation. Currently supports: 
+ * - Construction from a vector of objects
+ * - `O(log n)` containment checks
+ * - Pruning 
+ * - Validation and pruned validation
  * 
  * # Errors
  * Constructing a Merkle Tree using `MerkleTree::construct(&mut Vec<T>)` will return
@@ -20,7 +24,7 @@
  *  
  */
 
-use super::Hashable;
+use hash::Hashable;
 use self::{
     MrklVR::*,
     MerkleBranch::*
@@ -107,16 +111,16 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
      * - `data`: A vector of data which will be used to build the `MerkleTree` instance. For example, if data
      * was `vec!(x, y, z)`, then the resulting `MerkleTree` would be
      * 
-     *     h(h(h(x)||h(y))||h(h(z)))
-     *         /        \
-     *        /          \ 
-     *  h(h(x)||h(y))    h(h(z))
-     *     /   \          |
-     *    /     \         |
-     *   /       \        |
-     * h(x)     h(y)     h(z) 
-     *  |        |        | 
-     *  x        y        z
+     *           h(h(h(x)||h(y))||h(h(z)))
+     *               /        \
+     *              /          \ 
+     *        h(h(x)||h(y))    h(h(z))
+     *           /   \          |
+     *          /     \         |
+     *         /       \        |
+     *       h(x)     h(y)     h(z) 
+     *        |        |        | 
+     *        x        y        z
      * 
      * # Panics
      * In non-release builds, will panic if `data.len()` is less than 2.
@@ -192,21 +196,21 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
      * 
      * Calling `prune` on the left tree with `to_keep=[y]` yields the tree on the right.
      *         
-     *   
-     *            h3                             h3
-     *           /  \                           /  \
-     *          /    \                         /    \
-     *         /      \                       /      \
-     *        /        \                     /        \
-     *       /          \     -->   -->     /          \
-     *      /            \                 /            \
-     *     h1            h2               h1            h2  
-     *    /  \          /  \             /  \          
-     *   /    \        /    \           /    \            
-     *  /      \      /      \         /      \      
-     * hx      hy    hz       hw     hx       hy           
-     * |       |     |        |                |
-     * x       y     z        w                y
+     *         
+     *                  h3                             h3
+     *                 /  \                           /  \
+     *                /    \                         /    \
+     *               /      \                       /      \
+     *              /        \                     /        \
+     *             /          \     -->   -->     /          \
+     *            /            \                 /            \
+     *           h1            h2               h1            h2  
+     *          /  \          /  \             /  \          
+     *         /    \        /    \           /    \            
+     *        /      \      /      \         /      \      
+     *       hx      hy    hz       hw     hx       hy           
+     *       |       |     |        |                |
+     *       x       y     z        w                y
      * 
      * 
      * In the resulting tree, the right child of `root` and the left child of `h1` are now just hashes.

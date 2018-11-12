@@ -2,7 +2,16 @@
 
 use crypto::sha2::{Sha256};
 use crypto::digest::Digest;
-use super::Hashable;
+
+pub struct Block<T> {
+    previous: Option<HashPointer<Block<T>>>,
+    header_hash: u128,
+    content: Vec<T>
+}
+
+pub trait Hashable {
+    fn get_hash(&self) -> String;
+}
 
 impl Hashable for String {
     fn get_hash(&self) -> String {

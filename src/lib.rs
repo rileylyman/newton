@@ -16,7 +16,8 @@
 
 extern crate crypto;
 
-mod blockchain;
+pub mod hash;
+pub mod merkle;
 
 #[cfg(test)]
 mod test;
