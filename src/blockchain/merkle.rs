@@ -22,6 +22,7 @@
  */
 
 use super::Hashable;
+use self::MrklVR::*;
 
 /**
  * An enumerations of children types for `MerkleTree`.
@@ -145,19 +146,18 @@ impl<T: Hashable> MerkleTree<T> {
                
                 match (left_br.validate(), right_br.validate()) {
                     
-                    (MrklVR::Valid, MrklVR::Valid) => self.validate_internal_node(&left_br, Some(&right_br)),
+                    (Valid, Valid) => self.validate_internal_node(&left_br, Some(&right_br)),
 
-                    (result @ MrklVR::InvalidHash, _) | (_, result @ MrklVR::InvalidHash) => result,
+                    (result @ InvalidHash, _) | (_, result @ InvalidHash) => result,
 
-                    (_,_) => MrklVR::InvalidTree,
+                    (_,_) => InvalidTree,
                 }
             }
             (MerkleBranch::Branch(ref branch), MerkleBranch::None) => {
 
                 match branch.validate() {
-                    MrklVR::Valid => self.validate_internal_node(branch, None),
-                    result @ MrklVR::InvalidHash => result,
-                    result @ MrklVR::InvalidTree => result
+                    Valid => self.validate_internal_node(branch, None),
+                    result @ InvalidHash | result @ InvalidTree => result
                 }
                 
             }
@@ -169,7 +169,7 @@ impl<T: Hashable> MerkleTree<T> {
                     
             (_,_) => {
                 debug_assert!(false, "Mismatched children for node.");
-                MrklVR::InvalidTree
+                InvalidTree
             }
         }
     }
@@ -209,17 +209,17 @@ impl<T: Hashable> MerkleTree<T> {
            self.height == left_node.height + 1 &&
            right_has_correct_height
         { 
-               MrklVR::Valid 
+               Valid 
         }
         else if self.height != left_node.height + 1 ||
                 right_has_correct_height
         {
             debug_assert!(false, "Mismatched heights for internal node.");
-            MrklVR::InvalidTree
+            InvalidTree
         } 
         else {
             debug_assert!(false, "On internal node: mrkl_root differs from expected."); 
-            MrklVR::InvalidHash
+            InvalidHash
         }
     }
 
@@ -253,18 +253,18 @@ impl<T: Hashable> MerkleTree<T> {
             self.mrkl_root == hash &&
             self.height == 0 {
             
-            MrklVR::Valid
+            Valid
         } else if self.mrkl_root != hash {
            
             debug_assert!(false, "On leaf node: mrkl_root does not match concatenated hash.");
-            MrklVR::InvalidHash
+            InvalidHash
         }
         else if self.height != 0 {
             debug_assert!(false, "height is not zero on fringe node.");
-            MrklVR::InvalidTree
+            InvalidTree
         } else {
             debug_assert!(false, "On leaf node: leaf hash does not equal expected leaf hash");
-            MrklVR::InvalidHash
+            InvalidHash
         }
     }
 
