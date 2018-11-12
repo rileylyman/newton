@@ -21,7 +21,10 @@
  */
 
 use super::Hashable;
-use self::MrklVR::*;
+use self::{
+    MrklVR::*,
+    MerkleBranch::*
+};
 
 /**
  * An enumerations of children types for `MerkleTree`.
@@ -31,12 +34,17 @@ use self::MrklVR::*;
  * When a child is a leaf, it is specified as `MerkleBranch::Leaf`. Leaves contain 
  * an object of type `T` and a `String` which is the sha2 hash of that object.  
  * 
+ * If a child is `MerkleBranch::Partial`, we are dealing with a pruned tree. 
+ * `MerkleTree::validate` will never return `Valid` for a Merkle tree with 
+ * `Partial` branches, for that you must use `MerkleTree::validate_pruned`. 
+ * 
  * A child can also be `MerkleBranch::None`, if it contains no information.
  */
 enum MerkleBranch<T : Hashable> {
     Branch(Box<MerkleTree<T>>),
     Leaf(T, String),
-    None
+    Partial(String),
+    Empty
 }
 
 /**
@@ -45,9 +53,9 @@ enum MerkleBranch<T : Hashable> {
  * # Fields
  * `left`: The left child of the `MerkleTree`, held within a `MerkleBranch` enumeration.
  * 
- * `right`: The right child of the `MerkleTree`.
+ * `right`: The right child of the `MerkleTree`, held within a `MerkleBranch` enumeration.
  * 
- * `mrkl_root`: The sha2 hash of the concatenation of the hashes of this `MerkleTree`'s children.
+ * `mrkl_root`: The hash of each of this node's children -- sha2(left.mrkl_root || right.mrkl_root).
  * 
  * `height`: The height of the current node in the overall `MerkleTree`. Leaves have height 0.
  */
@@ -59,7 +67,7 @@ pub struct MerkleTree<T : Hashable> {
 }
 
 /**
- * The Merkle Validation Result enumeration enumerates the possible results of calling
+ * The Merkle Validation Result enumerates the possible results of calling
  * `MerkleTree::validate` on a Merkle tree.
  * 
  * The result is `Valid` if there are no inconsistencies when validating the tree.
@@ -69,6 +77,9 @@ pub struct MerkleTree<T : Hashable> {
  * 
  * `InvalidTree` represents a situation where the given `MerkleTree` is malformed. For example,
  * its left child is a leaf and its right child is a branch.
+ * 
+ * `InvalidHash` and `InvalidTree` will both contain a `String` which gives more information
+ * on how the validation failed.
  */
 pub enum MrklVR {
     Valid,
@@ -83,7 +94,19 @@ impl<T: Hashable> MerkleTree<T> {
      * Constructs a `MerkleTree` instance.
      * 
      * # Arguments
-     * - `mut data: Vec<T>`: A vector of data which will be used to build the `MerkleTree` instance.
+     * - `data`: A vector of data which will be used to build the `MerkleTree` instance. For example, if data
+     * was `vec!(x, y, z)`, then the resulting `MerkleTree` would be
+     * 
+     *     h(h(h(x)||h(y))||h(z))
+     *         /        \
+     *        /          \ 
+     *  h(h(x)||h(y))    h(z)
+     *     /   \          |
+     *    /     \         |
+     *   /       \        |
+     * h(x)     h(y)     h(z) 
+     *  |        |        | 
+     *  x        y        z
      * 
      * # Panics
      * In non-release builds, will panic if `data.len()` is less than 2. 
@@ -134,42 +157,33 @@ impl<T: Hashable> MerkleTree<T> {
      * Returns a `MrklVR` enumeration. See the documentation for `MrklVR` for the meanings
      * of each result.
      * 
+     * *Note*: This method will return InvalidTree if called on a pruned `MerkleTree` instance.
+     * Use `MerkleTree::validate_pruned` in those cases which validation of a pruned Merkle tree
+     * is required.
+     * 
      * # Panics
      * In non-release builds panics if, when validating a fringe node, it encounters a situation
      * where a right item hash is given but no right item is given, or vice versa. Note that in 
      * release builds this will cause `validate` to return `MrklVR::InvalidHash`.
      */
     pub fn validate(&self) -> MrklVR {
-       
-        match (&self.left, &self.right) {
-           
-           (MerkleBranch::Branch(ref left_br), MerkleBranch::Branch(ref right_br)) => {
-               
-                match (left_br.validate(), right_br.validate()) {
-                    
-                    (Valid, Valid) => self.validate_internal_node(&left_br, Some(&right_br)),
+        self._validate(false)
+    }
 
-                    (result @ InvalidHash(_), _) | (_, result @ InvalidHash(_)) => result,
-
-                    (result @ _,_) => result,
-                }
-            }
-            (MerkleBranch::Branch(ref branch), MerkleBranch::None) => {
-
-                match branch.validate() {
-                    Valid => self.validate_internal_node(branch, None),
-                    result @ InvalidHash(_) | result @ InvalidTree(_) => result
-                }
-                
-            }
-            (MerkleBranch::Leaf(ref left_it, ref left_hash), MerkleBranch::Leaf(ref right_it, ref right_hash)) 
-                    => self.validate_fringe_node(left_it, left_hash, Some(right_it), Some(right_hash)),
-            
-            (MerkleBranch::Leaf(ref left_it, ref left_hash), MerkleBranch::None) 
-                    => self.validate_fringe_node(left_it, left_hash, None, None),
-                    
-            (_,_) => InvalidTree(String::from("Malformed tree"))
-        }
+     /**
+     * Validates a given pruned instance of `MerkleTree`.
+     * 
+     * # Return Value
+     * Returns a `MrklVR` enumeration. See the documentation for `MrklVR` for the meanings
+     * of each result.
+     * 
+     * # Panics
+     * In non-release builds panics if, when validating a fringe node, it encounters a situation
+     * where a right item hash is given but no right item is given, or vice versa. Note that in 
+     * release builds this will cause `validate` to return `MrklVR::InvalidHash`.
+     */
+    pub fn validate_pruned(&self) -> MrklVR {
+        self._validate(true)
     }
 
 
@@ -178,6 +192,90 @@ impl<T: Hashable> MerkleTree<T> {
     |                                   Private MerkleTree methods below                                   |
     --------------------------------------------------------------------------------------------------------
     */
+
+    /**
+     * Function which drives the validation of a Merkle tree. If pruned is false, then
+     * it will call any tree invalid with pruned hashes.  
+     */
+    fn _validate(&self, pruned: bool) -> MrklVR {
+       
+        match (&self.left, &self.right) {
+           
+           /*
+           * If there are two branches, then we recursively validate each branch.
+           * If they are both valid, then we return the result of self.validate_internal_node.
+           * Otherwise, we propagate whichever Invalid result was returned by calling validate
+           * on each branch.
+           */
+           (Branch(ref left_br), Branch(ref right_br)) => {
+               
+                match (left_br._validate(pruned), right_br._validate(pruned)) {
+                    
+                    (Valid, Valid) => self.validate_internal_node(&left_br, Some(&right_br)),
+
+                    (result@InvalidHash(_), _) | (_, result@InvalidHash(_)) => result,
+
+                    (result@_,_) => result,
+                }
+            }
+
+            /*
+            * If the right branch is empty and the left is a branch, then we validate the
+            * left branch only. We call self.validate_internal_node with Option::None as the right
+            * branch if the left branch passes the validation.
+            */
+            (Branch(ref branch), Empty) => {
+
+                match branch._validate(pruned) {
+                    Valid => self.validate_internal_node(branch, None),
+                    result@InvalidHash(_) | result@InvalidTree(_) => result
+                }
+                
+            }
+
+            /*
+            * If both children are leaves, then we can simply call self.validate_fringe_node.
+            * We no longer have to worry about recursively calling validate in this case since
+            * leaves just contain raw objects.
+            */
+            (Leaf(ref left_it, ref left_hash), Leaf(ref right_it, ref right_hash)) 
+                    => self.validate_fringe_node(left_it, left_hash, Some(right_it), Some(right_hash)),
+            
+            /*
+            * If the left child is a leaf and the right is empty, we pass in the Option::None 
+            * argument to self.validate_fringe_node accordingly. Note that we must pass in 
+            * None to both right_it and right_hash, since it would not make sense to have
+            * one without the other. An invalid result will always be returned if we do not
+            * do so.
+            */
+            (Leaf(ref left_it, ref left_hash), Empty) 
+                    => self.validate_fringe_node(left_it, left_hash, None, None),
+
+            /*
+            * If both children are partial, then we have no information to go off of. 
+            * We have no choice but to return an InvalidTree specification.
+            */
+            (Partial(_),Partial(_)) 
+                    => InvalidTree(String::from("Invalid pruned tree. Only one child may be pruned.")),
+
+            /*
+            * Otherwise, if only one child is partial, then we can call self.evaluate_pruned_node.
+            */
+            (Partial(hash), other@_) | (other@_, Partial(hash)) => {
+                if !pruned { InvalidTree(String::from("Unexpected pruned tree.")) }
+                else {
+                    self.validate_pruned_node(hash, other)
+                }
+            }
+
+            /*
+            * Any other pattern for the children of a Merkle node would imply some sort of
+            * error in the structure of the tree. Therefore, we always report that we have a malformed tree
+            * if we get this far.
+            */        
+            (_,_) => InvalidTree(String::from("Malformed tree"))
+        }
+    }
 
 
     /**
@@ -253,8 +351,7 @@ impl<T: Hashable> MerkleTree<T> {
                     "Upon validating a fringe node, expected both right_it and right_hash to be None"
                 ));
             }
-        }
-        
+        }    
         
         if  left_it.get_hash() == *left_hash && 
             right_hash_is_valid &&
@@ -272,6 +369,50 @@ impl<T: Hashable> MerkleTree<T> {
         }
     }
 
+    /**
+     * Helper function for `MerkleTree::Validate` which validates a  node in the Merkle tree
+     * which has a partial child. It enumerates the other child. If the other child is a branch,
+     * then the branches hash concatenated with the pruned hash must hash to this node's mrkl_root.
+     * If the branch is a leaf, a similar check occurs, and we must further check that the leaf's 
+     * item hash still matches the computed item hash. In any other case we propagate Invalid errors.
+     */
+    fn validate_pruned_node(&self, pruned_hash: &str, other: &MerkleBranch<T>) -> MrklVR {
+        match other {
+            Branch(node) => {
+                match node.validate() {
+                    Valid => {
+                        let mut hash = String::new();
+                        hash.push_str(pruned_hash);
+                        hash.push_str(&node.mrkl_root);
+                        hash = hash.get_hash();
+                        if self.mrkl_root == hash {
+                            Valid
+                        } else {
+                            InvalidHash(String::from("An internal node had an unexpected mrkl_root"))
+                        }
+                    } 
+                    result@_ => result
+                }  
+            }
+            Leaf(ref item, ref item_hash) => {
+                let mut hash = String::new();
+                hash.push_str(item_hash);
+                hash.push_str(pruned_hash);
+                hash = hash.get_hash();
+                if item_hash == &item.get_hash() && hash == self.mrkl_root {
+                    Valid
+                } else if item_hash != &item.get_hash() {
+                    InvalidHash(String::from("A leaf's hash failed a hash check"))
+                } else {
+                    InvalidHash(String::from("A fringe node has an unexpected mrkl_root"))
+                }
+            }
+            Partial(_) => InvalidTree(String::from("Invalid pruned tree. Only one child may be pruned.")),
+            Empty => InvalidTree(String::from("Invalid pruned tree. Every node must
+                     have at least one valid child. This node has one empty and one partial child.")),
+        }
+    }
+
 
     /**
      * Helper function for `MerkleTree::construct`. Pops off the first element of 
@@ -285,7 +426,7 @@ impl<T: Hashable> MerkleTree<T> {
             
             hash.push_str(&first_hash);
 
-            MerkleBranch::Leaf(first, first_hash)
+            Leaf(first, first_hash)
     }
 
     /**
@@ -298,7 +439,7 @@ impl<T: Hashable> MerkleTree<T> {
         let first = data.remove(0);
         hash.push_str(&first.mrkl_root);
 
-        MerkleBranch::Branch(Box::new(first))
+        Branch(Box::new(first))
     }
 
     /**
@@ -312,7 +453,7 @@ impl<T: Hashable> MerkleTree<T> {
 
         let left_leaf = MerkleTree::construct_leaf(data, &mut hash);
 
-        let mut right_leaf = MerkleBranch::None;
+        let mut right_leaf = Empty;
         if data.len() > 0 {
             
             right_leaf = MerkleTree::construct_leaf(data, &mut hash);
@@ -337,7 +478,7 @@ impl<T: Hashable> MerkleTree<T> {
 
         let left_branch = MerkleTree::construct_branch(data, &mut hash);
 
-        let mut right_branch = MerkleBranch::None;
+        let mut right_branch = Empty;
         if data.len() > 0 {
             right_branch = MerkleTree::construct_branch(data, &mut hash);
             hash = hash.get_hash();   
