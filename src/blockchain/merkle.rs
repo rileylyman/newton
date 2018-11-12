@@ -210,9 +210,19 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
 
     }*/
 
-    /*pub fn contains(&self, item: &T) -> bool {
-
-    } */
+    pub fn contains(&self, item: &T) -> bool {
+        let search_branch = if *item <= self.l_bound {
+            &self.left
+        } else {
+            &self.right
+        };
+        
+        match search_branch {
+            Branch(node) => node.contains(item),
+            Leaf(value, _) => *value == *item,
+            _ => false
+        }
+    } 
 
     /**
      * Validates a given instance of `MerkleTree`.
