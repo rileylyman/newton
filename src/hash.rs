@@ -32,14 +32,12 @@ impl<T> HashPointer<T> where T: Hashable {
         HashPointer { hash: item.get_hash(), ptr: Box::new(item) }
     }
 
-    pub fn verify_hash(&self, other_hash: &str) -> HashCheckResult {
-        if other_hash == self.hash {
-            HashCheckResult::Unmodified
+    pub fn verify_hash(&self) -> bool {
+        if self.ptr.get_hash() == self.hash {
+            true
         } else {
-            HashCheckResult::Modified
+            false
         }
     }
 }
-
-pub enum HashCheckResult { Unmodified, Modified }
 

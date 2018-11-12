@@ -44,11 +44,15 @@ fn merkle2() {
     }
     let mut m_tree = merkle::MerkleTree::construct(v).unwrap();
 
-    for i in 1..10000 {
+    for i in (1..10000).step_by(2) {
+        println!("first iter: {}", i);
         assert!(m_tree.contains(&i.to_string()).unwrap());
     }
-    for i in 10000..20000 {
-        assert_eq!(m_tree.contains(&i.to_string()).unwrap(), false);
+    for i in (2..1001).step_by(2) {
+        if i % 2 == 0 {
+            println!("{}", i);
+            assert!(!m_tree.contains(&i.to_string()).unwrap());
+        }
     }
 
     match m_tree.validate() {
@@ -66,7 +70,7 @@ fn merkle2() {
         }
     }
 
-    if m_tree.prune(&[10.to_string(), 100.to_string()]) {
+    /*if m_tree.prune(&[10.to_string(), 100.to_string()]) {
         match m_tree.validate() {
             merkle::MrklVR::InvalidTree(_) => { println!("correct invalud"); assert!(true)}
             _ => assert!(false)
@@ -84,6 +88,6 @@ fn merkle2() {
     match m_tree.contains(&132.to_string()) {
         Err(_) => assert!(true),
         Ok(x) => {println!("{}", x); assert!(false)}
-    }
+    }*/
 
 }

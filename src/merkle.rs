@@ -24,7 +24,7 @@
  *  
  */
 
-use hash::Hashable;
+use hash::{Hashable, HashPointer};
 use self::{
     MrklVR::*,
     MerkleBranch::*
@@ -46,7 +46,7 @@ use self::{
  */
 enum MerkleBranch<T : Hashable + Ord + Clone> {
     Branch(Box<MerkleTree<T>>),
-    Leaf(T, String),
+    Leaf(HashPointer<T>),
     Partial(String),
     Empty
 }
@@ -274,7 +274,7 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
         
         match search_branch {
             Branch(node) => node.contains(item),
-            Leaf(value, _) => Ok(*value == *item),
+            Leaf(value) => Ok(*value.ptr == *item),
             Partial(_) => Err(String::from("Could not search further in pruned tree")),
             _ => Ok(false)
         }
@@ -375,7 +375,7 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
         let compute_branch = |br: &mut MerkleBranch<T>| {
             match br {
                 Branch(node) =>  { Ok(Partial(node.mrkl_root.clone())) }
-                Leaf(_, hash) => { Ok(Partial(hash.clone())) }
+                Leaf(hash_pointer) => { Ok(Partial(hash_pointer.hash.clone())) }
                 Partial(hash) => { Ok(Partial(hash.clone())) }
                 _ => Err(String::from("Cannot prune empty branch"))
             }
@@ -403,7 +403,7 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
     fn find_min_right(&self) -> Result<&T, String> {
         match &self.right {
             Branch(node) => node.find_min(),
-            Leaf(value,_) => Ok(value),
+            Leaf(value) => Ok(value.ptr.as_ref()),
             _ => Err(String::from("There is nowhere to search to the right to find the minimum element"))
         }
     }
@@ -418,7 +418,7 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
     fn find_min(&self) -> Result<&T, String> {
         match &self.left {
             Branch(node) => node.find_min(),
-            Leaf(value, _) => Ok(value),
+            Leaf(value) => Ok(value.ptr.as_ref()),
             _ => Err(String::from("Couldn't go left anymore when finding minimum element"))
         }
     }
@@ -477,8 +477,8 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
             * We no longer have to worry about recursively calling validate in this case since
             * leaves just contain raw objects.
             */
-            (Leaf(ref left_it, ref left_hash), Leaf(ref right_it, ref right_hash)) 
-                    => self.validate_fringe_node(left_it, left_hash, Some(right_it), Some(right_hash)),
+            (Leaf(ref left_hpointer), Leaf(ref right_hpointer)) 
+                    => self.validate_fringe_node(left_hpointer, Some(right_hpointer)),
             
             /*
             * If the left child is a leaf and the right is empty, we pass in the Option::None 
@@ -487,8 +487,8 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
             * one without the other. An invalid result will always be returned if we do not
             * do so.
             */
-            (Leaf(ref left_it, ref left_hash), Empty) 
-                    => self.validate_fringe_node(left_it, left_hash, None, None),
+            (Leaf(ref hpointer), Empty) 
+                    => self.validate_fringe_node(hpointer, None),
 
             /*
             * If both children are partial, then we have no information to go off of. 
@@ -565,37 +565,27 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
      * It first computes the concatenated hash for its children, and compares that with its
      * `mrkl_root`. It then checks that its height is 0.
      */
-    fn validate_fringe_node(&self, left_it: &T, left_hash: &str, right_it: Option<&T>, right_hash: Option<&str>)
+    fn validate_fringe_node(&self, left_hpointer: &HashPointer<T>, right_hpointer: Option<&HashPointer<T>>)
             -> MrklVR {
         
         let mut hash  = String::new();
-        hash.push_str( left_hash);
+        hash.push_str( &left_hpointer.hash);
 
         let mut right_hash_is_valid = true;
-        match (right_it, right_hash) {
+        match right_hpointer {
 
-            (Some(r), Some(r_hash)) => {
-                hash.push_str(&r_hash);
+            Some(r) => {
+                hash.push_str(&r.hash);
 
-                right_hash_is_valid = r.get_hash() == r_hash;
+                right_hash_is_valid = r.verify_hash();
             }
-
-            (None, None) => {}
-
-            (_,_) => {
-                debug_assert!(false, 
-                    "Upon validating a fringe node, expected both right_it and right_hash to be None"
-                );
-                return InvalidTree(String::from(
-                    "Upon validating a fringe node, expected both right_it and right_hash to be None"
-                ));
-            }
+            None => {}
         }    
 
         hash = hash.get_hash();
 
         
-        if  left_it.get_hash() == *left_hash && 
+        if  left_hpointer.verify_hash() && 
             right_hash_is_valid &&
             self.mrkl_root == hash &&
             self.height == 0 {
@@ -636,14 +626,14 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
                     result@_ => result
                 }  
             }
-            Leaf(ref item, ref item_hash) => {
+            Leaf(ref hpointer) => {
                 let mut hash = String::new();
-                hash.push_str(item_hash);
+                hash.push_str(&hpointer.hash);
                 hash.push_str(pruned_hash);
                 hash = hash.get_hash();
-                if item_hash == &item.get_hash() && hash == self.mrkl_root {
+                if hpointer.verify_hash() && hash == self.mrkl_root {
                     Valid
-                } else if item_hash != &item.get_hash() {
+                } else if hpointer.verify_hash() {
                     InvalidHash(String::from("A leaf's hash failed a hash check"))
                 } else {
                     InvalidHash(String::from("A fringe node has an unexpected mrkl_root"))
@@ -673,7 +663,7 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
             
             hash.push_str(&first_hash);
 
-            Leaf(first, first_hash)
+            Leaf(HashPointer::to(first))
     }
 
     /**
@@ -710,13 +700,13 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
 
         let l_bound;
         match left_leaf {
-            Leaf(ref value,_) => { l_bound = value.clone(); }
+            Leaf(ref hpointer) => { l_bound = hpointer.ptr.as_ref().clone(); }
             _ => { return Err(String::from("Leaf contains no data")); }
         }
 
         let mut r_bound = l_bound.clone();
         match right_leaf {
-            Leaf(ref value,_) => { r_bound = value.clone(); }
+            Leaf(ref hpointer) => { r_bound = hpointer.ptr.as_ref().clone(); }
             _ => {}
         }
 
