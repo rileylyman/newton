@@ -1,5 +1,7 @@
 # Newton
 
+This library is a work in progress. Releases will be made as features are completed.
+
 ## Overview
 Implementations of common data structures and algorithms used in the creation of Blockchain applications. 
 
@@ -23,7 +25,7 @@ let names = vec!(String::from("first"),
 let mrkl_tree = merkle::MerkleTree::construct(names).unwrap();
 ```
 ### Containment checking
-The `MerkleTree<T>::contains` method takes an `&T` borrow and checks in `O(log n)` with binary search time whether or not the tree contains that element. `contains` returns `Result<bool, String>`. Example:
+The `MerkleTree<T>::contains` method takes an `&T` borrow and checks in `O(log n)` time with binary search whether or not the tree contains that element. `contains` returns `Result<bool, String>`. Example:
 ```
 assert!(mrkl_tree.contains(&String::from("first)).unwrap());
 assert!(!mrkl_tree.contains(&String::from("tenth")).unwrap());

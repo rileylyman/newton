@@ -66,19 +66,11 @@ fn merkle2() {
         }
     }
 
-    /*These checks work*/
-    let eleven = 11.to_string();
-    let one01 = 101.to_string();
-    assert!(m_tree.contains(&eleven).unwrap());
-    assert!(m_tree.contains(&one01).unwrap());
-
-    /*These checks also work.*/
     let to_check = vec!(11.to_string(), 101.to_string());
-    for element in to_check {
+    for element in &to_check {
         assert!(m_tree.contains(&element).unwrap());
     }
 
-    /*But pruning still returns false because to_check is not contained in the tree.*/
     if m_tree.prune(&to_check) {
         match m_tree.validate() {
             merkle::MrklVR::InvalidTree(_) => {}

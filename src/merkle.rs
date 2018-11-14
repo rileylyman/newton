@@ -387,7 +387,7 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
             *branch = compute_branch(branch).unwrap(); true
         } else {
             match branch {
-                Branch(node) => { node.prune(to_keep) }
+                Branch(node) => { node._prune(to_keep) }
                 _ => { true } // There is no more recursion to do. We either have that one of to_keep is
             }                 // equal to the leaf value, or that it is an empty branch and so we shan't recurse.
         }
@@ -551,7 +551,7 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
                Valid 
         }
         else if self.height != left_node.height + 1 ||
-                right_has_correct_height
+                !right_has_correct_height
         {
             InvalidTree(String::from("An internal node has height which differs from 1 + (child height)"))
         } 
