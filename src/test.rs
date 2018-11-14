@@ -39,20 +39,16 @@ fn merkle1() {
 #[test]
 fn merkle2() {
     let mut v = Vec::new();
-    for i in 1..10000 {
+    for i in (1..10000).step_by(2) {
         v.push(i.to_string());
     }
     let mut m_tree = merkle::MerkleTree::construct(v).unwrap();
 
     for i in (1..10000).step_by(2) {
-        println!("first iter: {}", i);
         assert!(m_tree.contains(&i.to_string()).unwrap());
     }
-    for i in (2..1001).step_by(2) {
-        if i % 2 == 0 {
-            println!("{}", i);
-            assert!(!m_tree.contains(&i.to_string()).unwrap());
-        }
+    for i in (2..10000).step_by(2) {
+        assert!(!m_tree.contains(&i.to_string()).unwrap());     
     }
 
     match m_tree.validate() {
@@ -70,24 +66,33 @@ fn merkle2() {
         }
     }
 
-    /*if m_tree.prune(&[10.to_string(), 100.to_string()]) {
+    /*These checks work*/
+    let eleven = 11.to_string();
+    let one01 = 101.to_string();
+    assert!(m_tree.contains(&eleven).unwrap());
+    assert!(m_tree.contains(&one01).unwrap());
+
+    /*These checks also work.*/
+    let to_check = vec!(11.to_string(), 101.to_string());
+    for element in to_check {
+        assert!(m_tree.contains(&element).unwrap());
+    }
+
+    /*But pruning still returns false because to_check is not contained in the tree.*/
+    if m_tree.prune(&to_check) {
         match m_tree.validate() {
-            merkle::MrklVR::InvalidTree(_) => { println!("correct invalud"); assert!(true)}
-            _ => assert!(false)
+            merkle::MrklVR::InvalidTree(_) => {}
+            _ => assert!(false) 
         }
     } else {
         assert!(false);
     }
 
-    match m_tree.validate_pruned() {
-        merkle::MrklVR::Valid => { println!("pruned valid"); assert!(true) } 
-        _ => assert!(false)
-    }
+}
 
-    assert!(m_tree.contains(&10.to_string()).unwrap());
-    match m_tree.contains(&132.to_string()) {
-        Err(_) => assert!(true),
-        Ok(x) => {println!("{}", x); assert!(false)}
-    }*/
-
+#[test]
+fn merkle_contains() {
+    let m_tree = merkle::MerkleTree::construct(vec!(1.to_string(), 3.to_string())).unwrap();
+    
+    assert!(!m_tree.contains(&2.to_string()).unwrap())
 }
