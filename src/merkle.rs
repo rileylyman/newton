@@ -17,8 +17,11 @@
  * 
  * ```
  * let data = vec!("some", "sample", "data");
- * let mrkl_tree = MerkleTree::construct(data);
- * assert_eq!(mrkl_tree.validate(), MrklVR::Valid);
+ * let mrkl_tree = merkle::MerkleTree::construct(&mut data);
+ * match mrkl_tree.validate() {
+ *     merkle::MrklVR::Valid => {}
+ *     _ => assert!(false)
+ * }
  * 
  * ```
  *  

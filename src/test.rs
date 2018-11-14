@@ -80,6 +80,7 @@ fn merkle2() {
         assert!(false);
     }
 
+
 }
 
 #[test]
