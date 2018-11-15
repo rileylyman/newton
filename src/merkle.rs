@@ -27,7 +27,7 @@
  *  
  */
 
-use hash::{Hashable, HashPointer};
+use hash::{Hashable};
 use self::{
     MrklVR::*,
     MerkleBranch::*
@@ -222,7 +222,7 @@ impl MerkleTree {
      * where a right item hash is given but no right item is given, or vice versa. Note that in 
      * release builds this will cause `validate` to return `MrklVR::InvalidHash`.
      */
-    fn validate(&self) -> MrklVR {
+    pub fn validate(&self) -> MrklVR {
        
         //##################################################################
         //TODO: make sure leaves are in order.
