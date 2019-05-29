@@ -1,20 +1,20 @@
 /*!
- * A Merkle Tree implementation. Currently supports: 
+ * A Merkle Tree implementation. Currently supports:
  * - Construction from a vector of objects
  * - `O(log n)` containment checks
- * - Pruning 
+ * - Pruning
  * - Validation and pruned validation
- * 
+ *
  * # Errors
  * Constructing a Merkle Tree using `MerkleTree::construct(&mut Vec<T>)` will return
  * an error result if the passed vector has fewer than two items.
- * 
+ *
  * # Panics
  * - In non-release builds, constructing a Merkle Tree will panic if we call the constructor
  * with a vector of fewer than two elements.
- * 
+ *
  * # Examples
- * 
+ *
  * ```
  * let data = vec!("some", "sample", "data");
  * let mrkl_tree = merkle::MerkleTree::construct(&mut data);
@@ -22,9 +22,9 @@
  *     merkle::MrklVR::Valid => {}
  *     _ => assert!(false)
  * }
- * 
+ *
  * ```
- *  
+ *
  */
 
 use hash::{Hashable, HashPointer};
@@ -37,15 +37,15 @@ use self::{
  * An enumerations of children types for `MerkleTree`.
  * ---
  * When a child contains another `MerkleTree`, it is specified as `MerkleBranch::Branch`.
- * 
- * When a child is a leaf, it is specified as `MerkleBranch::Leaf`. Leaves contain 
- * an object of type `T` and a `String` which is the sha2 hash of that object.  
- * 
- * If a child is `MerkleBranch::Partial`, we are dealing with a pruned tree. 
- * `MerkleTree::validate` will never return `Valid` for a Merkle tree with 
- * `Partial` branches, for that you must use `MerkleTree::validate_pruned`. 
- * 
- * A child can also be `MerkleBranch::None`, if it contains no information.
+ *
+ * When a child is a leaf, it is specified as `MerkleBranch::Leaf`. Leaves contain
+ * an object of type `T` and a `String` which is the sha2 hash of that object.
+ *
+ * If a child is `MerkleBranch::Partial`, we are dealing with a pruned tree.
+ * `MerkleTree::validate` will never return `Valid` for a Merkle tree with
+ * `Partial` branches, for that you must use `MerkleTree::validate_pruned`.
+ *
+ * A child can also be `MerkleBranch::None`, if it contains no information!
  */
 enum MerkleBranch<T : Hashable + Ord + Clone> {
     Branch(Box<MerkleTree<T>>),
@@ -56,45 +56,45 @@ enum MerkleBranch<T : Hashable + Ord + Clone> {
 
 /**
  * A struct representing a Merkle Tree, which may or may not be an internal node.
- * 
+ *
  * # Fields
  * `left`: The left child of the `MerkleTree`, held within a `MerkleBranch` enumeration.
- * 
+ *
  * `right`: The right child of the `MerkleTree`, held within a `MerkleBranch` enumeration.
- * 
+ *
  * `l_bound`: The largest element in the Merkle tree who has `left` as an ancestor
- * 
+ *
  * `r_bound`: The largest element in the Merkle tree who has `right` as an ancestor
- * 
+ *
  * `mrkl_root`: The hash of each of this node's children -- sha2(left.mrkl_root || right.mrkl_root).
- * 
+ *
  * `height`: The height of the current node in the overall `MerkleTree`. Leaves have height 0.
  */
 pub struct MerkleTree<T : Hashable + Ord + Clone> {
-    
+
     left: MerkleBranch<T>,
     right: MerkleBranch<T>,
-    
+
     l_bound: T, //#####################################################
     r_bound: T, // TODO: Pruning is worthless if we still have copies. Make Option<T>
 
     mrkl_root: String,
-    
-    height: usize 
+
+    height: usize
 }
 
 /**
  * The Merkle Validation Result enumerates the possible results of calling
  * `MerkleTree::validate` on a Merkle tree.
- * 
+ *
  * The result is `Valid` if there are no inconsistencies when validating the tree.
- * 
+ *
  * `InvalidHash` represents a situation when the hash of the children of a `MerkleTree`
- * do not equal the tree's `mrkl_root`. 
- * 
+ * do not equal the tree's `mrkl_root`.
+ *
  * `InvalidTree` represents a situation where the given `MerkleTree` is malformed. For example,
  * its left child is a leaf and its right child is a branch.
- * 
+ *
  * `InvalidHash` and `InvalidTree` will both contain a `String` which gives more information
  * on how the validation failed.
  */
@@ -109,28 +109,28 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
 
     /**
      * Constructs a `MerkleTree` instance.
-     * 
+     *
      * # Arguments
      * - `data`: A vector of data which will be used to build the `MerkleTree` instance. For example, if data
      * was `vec!(x, y, z)`, then the resulting `MerkleTree` would be
-     * 
+     *
      *           h(h(h(x)||h(y))||h(h(z)))
      *               /        \
-     *              /          \ 
+     *              /          \
      *        h(h(x)||h(y))    h(h(z))
      *           /   \          |
      *          /     \         |
      *         /       \        |
-     *       h(x)     h(y)     h(z) 
-     *        |        |        | 
+     *       h(x)     h(y)     h(z)
+     *        |        |        |
      *        x        y        z
-     * 
+     *
      * # Panics
      * In non-release builds, will panic if `data.len()` is less than 2.
-     * 
+     *
      * # Errors
      * May return an error if it fails to construct leaves correctly.
-     * Will return an error result if the length of `data` is less than 2. 
+     * Will return an error result if the length of `data` is less than 2.
      */
     pub fn construct(mut data: Vec<T>) -> Result<Self, String> {
 
@@ -169,37 +169,37 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
                     Ok(node) => new_mrkl_trees.push(node),
                     Err(msg) => { return Err(msg); }
                 }
-                
+
             }
 
             mrkl_trees = new_mrkl_trees;
-            height += 1;        
+            height += 1;
         }
         Ok(mrkl_trees.remove(0))
     }
 
     /**
      * A destructive method which prunes a Merkle tree, only keeping branches which
-     * lead to the elements specified in `to_keep`. Unnecessary branches are converted 
+     * lead to the elements specified in `to_keep`. Unnecessary branches are converted
      * to `MerkleBranch::Partial(hash)`, where hash is the value of the `mrkl_root` of
-     * the node that was pruned. 
-     * 
-     * *Note*: After a Merkle tree has been pruned, you must use the method `validate_pruned` 
+     * the node that was pruned.
+     *
+     * *Note*: After a Merkle tree has been pruned, you must use the method `validate_pruned`
      * instad of `validate` to check if the tree is valid.
-     * 
+     *
      * # Arguments
      * `to_keep`: An array slice which lists the leaves you wish to keep in the Merkle tree.
-     * 
+     *
      * # Return Value
-     * Returns `true` if there were no errors during pruning, and `false` otherwise. 
-     * 
+     * Returns `true` if there were no errors during pruning, and `false` otherwise.
+     *
      * # Examples
-     *  
+     *
      * Consider the following scenario:
-     * 
+     *
      * Calling `prune` on the left tree with `to_keep=[y]` yields the tree on the right.
-     *         
-     *         
+     *
+     *
      *                  h3                             h3
      *                 /  \                           /  \
      *                /    \                         /    \
@@ -207,39 +207,39 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
      *              /        \                     /        \
      *             /          \     -->   -->     /          \
      *            /            \                 /            \
-     *           h1            h2               h1            h2  
-     *          /  \          /  \             /  \          
-     *         /    \        /    \           /    \            
-     *        /      \      /      \         /      \      
-     *       hx      hy    hz       hw     hx       hy           
+     *           h1            h2               h1            h2
+     *          /  \          /  \             /  \
+     *         /    \        /    \           /    \
+     *        /      \      /      \         /      \
+     *       hx      hy    hz       hw     hx       hy
      *       |       |     |        |                |
      *       x       y     z        w                y
-     * 
-     * 
+     *
+     *
      * In the resulting tree, the right child of `root` and the left child of `h1` are now just hashes.
      *
      * # Errors
      * - Will return false if `to_keep` is empty, since this would be effectively pruning the
-     * entire tree away. 
+     * entire tree away.
      * - There are a number of errors that could occur when pruning malformed trees, so it may be advisable
      * to validate a tree before pruning, unless you are certain the tree is valid. One such error is that
      * there is an empty branch as the left child.
-     * 
+     *
      */
     pub fn prune(&mut self, to_keep: &[T]) -> bool {
-        
-        // The tree we are pruning must be valid. Otherwise there is 
+
+        // The tree we are pruning must be valid. Otherwise there is
         // no way for us to check whether all the elements in `to_keep`
-        // are contained within the tree, and therefore no way for us to 
+        // are contained within the tree, and therefore no way for us to
         // recurse properly. All the elements of the tree must be sorted as
-        // well, which is also verifed by validate. 
+        // well, which is also verifed by validate.
         if let Valid = self.validate() {} else { // Check if tree is valid
             return false;
         }
 
         // We also cannot prune an entire tree. An alternative to this would
         // be to grab the `mrkl_root` from the root node.
-        if to_keep.len() <= 0 { return false; } 
+        if to_keep.len() <= 0 { return false; }
 
         // All elements of `to_keep` must be contained within the Merkle tree.
         // Otherwise we would encounter situations where we do not prune a branch
@@ -249,19 +249,19 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
         }
 
         self._prune(to_keep)
-        
+
     }
 
     /**
      * Reports whether or not a given item is contained within one of the leaves of the Merkle tree.
      * The merkle leaves are sorted, so this method binary searches for the correct leaf in O(log n) time.
-     * 
+     *
      * # Arguments
      * `item`: A borrow of the item you want to search for
-     * 
+     *
      * # Return Value
-     * Returns `true` if it finds a leaf in the merkle tree with data equal to `item`, and `false` otherwise. 
-     * 
+     * Returns `true` if it finds a leaf in the merkle tree with data equal to `item`, and `false` otherwise.
+     *
      * # Errors
      * Searching for an item in a pruned tree will only work if the item was not pruned. Otherwise,
      * There is usually no way to tell whether or not that item was ever in the tree before it was pruned.
@@ -274,45 +274,45 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
         } else {
             &self.right
         };
-        
+
         match search_branch {
             Branch(node) => node.contains(item),
             Leaf(value) => Ok(*value.ptr == *item),
             Partial(_) => Err(String::from("Could not search further in pruned tree")),
             _ => Ok(false)
         }
-    } 
+    }
 
     /**
      * Validates a given instance of `MerkleTree`.
-     * 
+     *
      * # Return Value
      * Returns a `MrklVR` enumeration. See the documentation for `MrklVR` for the meanings
      * of each result.
-     * 
+     *
      * *Note*: This method will return InvalidTree if called on a pruned `MerkleTree` instance.
      * Use `MerkleTree::validate_pruned` in those cases which validation of a pruned Merkle tree
      * is required.
-     * 
+     *
      * # Panics
      * In non-release builds panics if, when validating a fringe node, it encounters a situation
-     * where a right item hash is given but no right item is given, or vice versa. Note that in 
+     * where a right item hash is given but no right item is given, or vice versa. Note that in
      * release builds this will cause `validate` to return `MrklVR::InvalidHash`.
      */
-    pub fn validate(&self) -> MrklVR { 
+    pub fn validate(&self) -> MrklVR {
         self._validate(false)
     }
 
      /**
      * Validates a given pruned instance of `MerkleTree`.
-     * 
+     *
      * # Return Value
      * Returns a `MrklVR` enumeration. See the documentation for `MrklVR` for the meanings
      * of each result.
-     * 
+     *
      * # Panics
      * In non-release builds panics if, when validating a fringe node, it encounters a situation
-     * where a right item hash is given but no right item is given, or vice versa. Note that in 
+     * where a right item hash is given but no right item is given, or vice versa. Note that in
      * release builds this will cause `validate` to return `MrklVR::InvalidHash`.
      */
     pub fn validate_pruned(&self) -> MrklVR {
@@ -330,7 +330,7 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
      * elements of `to_keep` are contained within the tree, and otherwise return false. However,
      * if we did that at every step, then there will usually be some subtree which we check that
      * does not contain all values of `to_keep`. Therefore, we do this check only once when we
-     * first call `prune`, and then we transfer control to `_prune`. 
+     * first call `prune`, and then we transfer control to `_prune`.
      */
     fn _prune(&mut self, to_keep: &[T]) -> bool {
 
@@ -346,7 +346,7 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
 
         let mut prune_right = true; {           // We start a new scope here since self.find_min_right()
                                                 // borrows self.right
-            let min_right;                      // We use the reference to one of the leaves of 
+            let min_right;                      // We use the reference to one of the leaves of
             match self.find_min_right() {       // the tree to compute whether or not all the elements
                 Ok(x) => { min_right = x; }     // of to_keep are less than the min_right value,
                 _ => { return result; }         // but after that we stop borrowing immutably so we can
@@ -364,17 +364,17 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
 
 
     /**
-     * Helper function that handles recursion for `prune`. If we want to prune the branch, 
+     * Helper function that handles recursion for `prune`. If we want to prune the branch,
      * it handles computing the `Partial` branch. Otherwise, it attempts to recurse on that
      * `Branch`, and otherwise stops recursion.
-     * 
+     *
      * # Errors
      * Will error given a situation where `prune` attempts to prune an empty branch. This is impossible,
-     * since we cannot create a `Partial` branch if we have no data. However, this should never 
-     * happen in practice, due to the checks `prune` runs before pruning a tree.  
+     * since we cannot create a `Partial` branch if we have no data. However, this should never
+     * happen in practice, due to the checks `prune` runs before pruning a tree.
      */
     fn prune_recurse(to_keep: &[T], branch: &mut MerkleBranch<T>, should_prune: bool) -> bool {
-        
+
         let compute_branch = |br: &mut MerkleBranch<T>| {
             match br {
                 Branch(node) =>  { Ok(Partial(node.mrkl_root.clone())) }
@@ -385,7 +385,7 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
         };
         // This error value should be unreachable. It would require us to have searched down the branch
         // to find a value to compare to to_keep, and then come to find out that the branch is empty.
-        
+
         if should_prune {
             *branch = compute_branch(branch).unwrap(); true
         } else {
@@ -397,11 +397,11 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
     }
 
     /**
-     * Finds the leftmost leaf in the right child of the given Merkle tree. This will 
+     * Finds the leftmost leaf in the right child of the given Merkle tree. This will
      * be the minimum value to the right of the current Merkle root if the tree is sorted.
-     * 
+     *
      * #Errors
-     * Will return an error if the right branch is partial or empty.  
+     * Will return an error if the right branch is partial or empty.
      */
     fn find_min_right(&self) -> Result<&T, String> {
         match &self.right {
@@ -412,9 +412,9 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
     }
 
     /**
-     * Finds the leftmost leaf value in a given Merkle Tree. This will be the 
-     * minimum value if the tree is sorted. 
-     * 
+     * Finds the leftmost leaf value in a given Merkle Tree. This will be the
+     * minimum value if the tree is sorted.
+     *
      * # Errors
      * Will return an error if the left branch is partial or empty.
      */
@@ -434,15 +434,15 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
 
     /**
      * Function which drives the validation of a Merkle tree. If pruned is false, then
-     * it will call any tree invalid with pruned hashes.  
+     * it will call any tree invalid with pruned hashes.
      */
     fn _validate(&self, pruned: bool) -> MrklVR {
-       
+
         //##################################################################
         //TODO: make sure leaves are in order.
 
         match (&self.left, &self.right) {
-           
+
            /*
            * If there are two branches, then we recursively validate each branch.
            * If they are both valid, then we return the result of self.validate_internal_node.
@@ -450,9 +450,9 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
            * on each branch.
            */
            (Branch(ref left_br), Branch(ref right_br)) => {
-               
+
                 match (left_br._validate(pruned), right_br._validate(pruned)) {
-                    
+
                     (Valid, Valid) => self.validate_internal_node(&left_br, Some(&right_br)),
 
                     (result@InvalidHash(_), _) | (_, result@InvalidHash(_)) => result,
@@ -472,7 +472,7 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
                     Valid => self.validate_internal_node(branch, None),
                     result@InvalidHash(_) | result@InvalidTree(_) => result
                 }
-                
+
             }
 
             /*
@@ -480,24 +480,24 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
             * We no longer have to worry about recursively calling validate in this case since
             * leaves just contain raw objects.
             */
-            (Leaf(ref left_hpointer), Leaf(ref right_hpointer)) 
+            (Leaf(ref left_hpointer), Leaf(ref right_hpointer))
                     => self.validate_fringe_node(left_hpointer, Some(right_hpointer)),
-            
+
             /*
-            * If the left child is a leaf and the right is empty, we pass in the Option::None 
-            * argument to self.validate_fringe_node accordingly. Note that we must pass in 
+            * If the left child is a leaf and the right is empty, we pass in the Option::None
+            * argument to self.validate_fringe_node accordingly. Note that we must pass in
             * None to both right_it and right_hash, since it would not make sense to have
             * one without the other. An invalid result will always be returned if we do not
             * do so.
             */
-            (Leaf(ref hpointer), Empty) 
+            (Leaf(ref hpointer), Empty)
                     => self.validate_fringe_node(hpointer, None),
 
             /*
-            * If both children are partial, then we have no information to go off of. 
+            * If both children are partial, then we have no information to go off of.
             * We have no choice but to return an InvalidTree specification.
             */
-            (Partial(_),Partial(_)) 
+            (Partial(_),Partial(_))
                     => InvalidTree(String::from("Invalid pruned tree. Only one child may be pruned.")),
 
             /*
@@ -514,7 +514,7 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
             * Any other pattern for the children of a Merkle node would imply some sort of
             * error in the structure of the tree. Therefore, we always report that we have a malformed tree
             * if we get this far.
-            */        
+            */
             (_,_) => InvalidTree(String::from("Malformed tree"))
         }
     }
@@ -524,7 +524,7 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
      * Helper function for `MerkleTree::Validate` which validates an internal node in the Merkle tree.
      * It first computes the concatenated hash for its two children, and compares that with its
      * `mrkl_root`. It then checks that the height of its children are one less than its height.
-     * 
+     *
      * If `right_node` is `Option::None`, then the function will proceed accordingly by treating
      * the `MerkleTree` as a node with a single child.
      */
@@ -546,19 +546,19 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
         }
 
         hash = hash.get_hash();
-    
-        if hash == self.mrkl_root && 
+
+        if hash == self.mrkl_root &&
            self.height == left_node.height + 1 &&
            right_has_correct_height
-        { 
-               Valid 
+        {
+               Valid
         }
         else if self.height != left_node.height + 1 ||
                 !right_has_correct_height
         {
             InvalidTree(String::from("An internal node has height which differs from 1 + (child height)"))
-        } 
-        else { 
+        }
+        else {
             InvalidHash(String::from("An internal node has an unexpected mrkl_root"))
         }
     }
@@ -570,7 +570,7 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
      */
     fn validate_fringe_node(&self, left_hpointer: &HashPointer<T>, right_hpointer: Option<&HashPointer<T>>)
             -> MrklVR {
-        
+
         let mut hash  = String::new();
         hash.push_str( &left_hpointer.hash);
 
@@ -583,16 +583,16 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
                 right_hash_is_valid = r.verify_hash();
             }
             None => {}
-        }    
+        }
 
         hash = hash.get_hash();
 
-        
-        if  left_hpointer.verify_hash() && 
+
+        if  left_hpointer.verify_hash() &&
             right_hash_is_valid &&
             self.mrkl_root == hash &&
             self.height == 0 {
-            
+
             Valid
         } else if self.mrkl_root != hash {
             InvalidHash(String::from("A fringe node has an unexpected mrkl_root"))
@@ -608,7 +608,7 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
      * Helper function for `MerkleTree::Validate` which validates a  node in the Merkle tree
      * which has a partial child. It enumerates the other child. If the other child is a branch,
      * then the branches hash concatenated with the pruned hash must hash to this node's mrkl_root.
-     * If the branch is a leaf, a similar check occurs, and we must further check that the leaf's 
+     * If the branch is a leaf, a similar check occurs, and we must further check that the leaf's
      * item hash still matches the computed item hash. In any other case we propagate Invalid errors.
      */
     fn validate_pruned_node(&self, pruned_hash: &str, other: &MerkleBranch<T>) -> MrklVR {
@@ -625,9 +625,9 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
                         } else {
                             InvalidHash(String::from("An internal node had an unexpected mrkl_root"))
                         }
-                    } 
+                    }
                     result@_ => result
-                }  
+                }
             }
             Leaf(ref hpointer) => {
                 let mut hash = String::new();
@@ -655,15 +655,15 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
     */
 
     /**
-     * Helper function for `MerkleTree::construct`. Pops off the first element of 
+     * Helper function for `MerkleTree::construct`. Pops off the first element of
      * `data` and creates a `MerkleBranch::Leaf`. It also pushes the hash of this first element
      * into `hash`.
      */
     fn construct_leaf(data: &mut Vec<T>, hash: &mut String) -> MerkleBranch<T> {
-            
+
             let first = data.remove(0);
             let first_hash = first.get_hash();
-            
+
             hash.push_str(&first_hash);
 
             Leaf(HashPointer::to(first))
@@ -675,7 +675,7 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
      * onto `hash`.
      */
     fn construct_branch(data: &mut Vec<MerkleTree<T>>, hash: &mut String) -> MerkleBranch<T> {
-        
+
         let first = data.remove(0);
         hash.push_str(&first.mrkl_root);
 
@@ -683,21 +683,21 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
     }
 
     /**
-     * Helper function for `MerkleTree::construct`. Creates a `MerkleTree` from the 
+     * Helper function for `MerkleTree::construct`. Creates a `MerkleTree` from the
      * first two elements of `data`, where the children of this `MerkleTree` are
      * leaves.
      */
-    fn construct_fringe_node(data: &mut Vec<T>) -> Result<MerkleTree<T>, String> {    
-       
+    fn construct_fringe_node(data: &mut Vec<T>) -> Result<MerkleTree<T>, String> {
+
         let mut hash = String::new();
 
         let left_leaf = MerkleTree::construct_leaf(data, &mut hash);
 
         let mut right_leaf = Empty;
         if data.len() > 0 {
-            
+
             right_leaf = MerkleTree::construct_leaf(data, &mut hash);
-            
+
         }
         hash = hash.get_hash();
 
@@ -725,7 +725,7 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
 
     /**
      * Helper function for `MerkleTree::construct`. Creates a `MerkleTree` from the first
-     * two elements of `data`, where the children of this `MerkleTree` are other `MerkleTree`s. 
+     * two elements of `data`, where the children of this `MerkleTree` are other `MerkleTree`s.
      */
     fn construct_internal_node(data: &mut Vec<MerkleTree<T>>, height: usize) -> Result<MerkleTree<T>, String> {
         let mut hash = String::new();
@@ -735,7 +735,7 @@ impl<T: Hashable + Ord + Clone> MerkleTree<T> {
         let mut right_branch = Empty;
         if data.len() > 0 {
             right_branch = MerkleTree::construct_branch(data, &mut hash);
-               
+
         }
 
         hash = hash.get_hash();
