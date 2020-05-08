@@ -18,8 +18,8 @@ fn merkle1() {
     );
     let mrkl_tree = merkle::MerkleTree::construct(names).unwrap();
     
-    assert!(mrkl_tree.contains(&String::from("alice").get_hash()));
-    assert!(!mrkl_tree.contains(&String::from("mje").get_hash()));
+    assert!(mrkl_tree.contains_item(&String::from("alice")));
+    assert!(!mrkl_tree.contains_item(&String::from("mje")));
 
     match mrkl_tree.validate() {
         merkle::MrklVR::Valid => {
@@ -46,10 +46,10 @@ fn merkle2() {
     let m_tree = merkle::MerkleTree::construct(v).unwrap();
 
     for i in (1..10000).step_by(2) {
-        assert!(m_tree.contains(&i.to_string().get_hash()));
+        assert!(m_tree.contains_item(&i.to_string()));
     }
     for i in (2..10000).step_by(2) {
-        assert!(!m_tree.contains(&i.to_string().get_hash()));     
+        assert!(!m_tree.contains_item(&i.to_string()));     
     }
 
     match m_tree.validate() {
@@ -70,8 +70,32 @@ fn merkle2() {
 }
 
 #[test]
+fn merkle_proof() {
+    let mut v = Vec::new();
+    for i in (1..10000).step_by(2) {
+        v.push(i.to_string());
+    }
+    let m_tree = merkle::MerkleTree::construct(v).unwrap();
+
+    let m_proof = m_tree.gen_proof(&107.to_string());
+    match m_proof {
+        Some(proof) => {
+            assert!(proof.check_proof_form(m_tree.get_mrkl_root(), m_tree.get_height()));
+            assert!(proof.verify(107.to_string()));
+        }
+        _ => assert!(false)
+    }
+    let m_proof = m_tree.gen_proof(108.to_string());
+    match m_proof {
+        Some(proof) => assert!(false),
+        _ => assert!(true)
+    }
+
+}
+
+#[test]
 fn merkle_contains() {
     let m_tree = merkle::MerkleTree::construct(vec!(1.to_string(), 3.to_string())).unwrap();
     
-    assert!(!m_tree.contains(&2.to_string()));
+    assert!(!m_tree.contains_item(&2.to_string()));
 }

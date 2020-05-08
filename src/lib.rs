@@ -18,6 +18,7 @@ extern crate crypto;
 
 pub mod hash;
 pub mod merkle;
+pub mod merkle_proof;
 
 #[cfg(test)]
 mod test;

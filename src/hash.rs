@@ -41,3 +41,9 @@ impl<T> HashPointer<T> where T: Hashable {
     }
 }
 
+pub fn concat_hashes(first: &str, second: &str) -> String {
+    let mut result = String::from(first);
+    result.push_str(second);
+    result.get_hash()
+}
+

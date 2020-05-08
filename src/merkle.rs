@@ -27,7 +27,8 @@
  *  
  */
 
-use hash::{Hashable};
+use hash::{Hashable, concat_hashes};
+use merkle_proof::{MerkleProof, MerkleProofStep};
 use self::{
     MrklVR::*,
     MerkleBranch::*
@@ -189,22 +190,59 @@ impl MerkleTree {
      * Therefore, if during the exectution of `contains` the search encounters a partial branch, it will
      * return an error.
      */
-    pub fn contains(&self, item_hash: &str) -> bool {
+    pub fn contains_hash(&self, item_hash: &str) -> bool {
         
         let mut result = false;
         match &self.left {
-            Branch(node) => result = node.contains(item_hash),
+            Branch(node) => result = node.contains_hash(item_hash),
             Leaf(hash) => result = hash == item_hash,
             _ => {}
         }
         match &self.right {
-            Branch(node) => result = result || node.contains(item_hash),
+            Branch(node) => result = result || node.contains_hash(item_hash),
             Leaf(hash) => result = result || hash == item_hash,
             _ => result = result || false
         }
 
         result
     } 
+
+    pub fn contains_item<T: Hashable>(&self, item: &T) -> bool {
+        self.contains_hash(&item.get_hash())
+    } 
+
+    pub fn get_mrkl_root(&self) -> String {
+        self.mrkl_root.clone()
+    }
+
+    pub fn get_height(&self) -> usize {
+        self.height
+    }
+
+    pub fn gen_proof<T: Hashable>(&self, item: &T) -> Option<MerkleProof> {
+        self.gen_proof_steps(item);
+    }
+
+    pub fn gen_proof_steps<T: Hashable>(&self, item: &T) -> Result<Vec<MerkleProofStep>, String> {
+        match (self.left, self.right) {
+            (Branch(l_node), Branch(r_node)) => {
+                if l_node.contains_item(item) {
+                    let partial_steps = l_node.gen_proof_steps(item).unwrap_or(|e| { return Err(e); });
+                    partial_steps.push(MerkleProofStep::Right(r_node.mrkl_root));
+                    Ok(partial_steps)
+                } else {
+                    let partial_steps = r_node.gen_proof_steps(item);
+                    partial_steps.push(MerkleProofStep::Left(l_node.mrkl_root))
+                }
+            }
+            (leaf@Leaf(hash),_) | (_, leaf@Leaf(hash)) if hash == item.get_hash() => {
+                vec!(hash)
+            }
+            (_, _) => Err(String::from("Could not find item in tree, so cannot create proof."))
+        }
+
+
+    }
 
     /**
      * Validates a given instance of `MerkleTree`.
@@ -223,9 +261,6 @@ impl MerkleTree {
      * release builds this will cause `validate` to return `MrklVR::InvalidHash`.
      */
     pub fn validate(&self) -> MrklVR {
-       
-        //##################################################################
-        //TODO: make sure leaves are in order.
 
         match (&self.left, &self.right) {
            
